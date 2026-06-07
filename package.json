@@ -1,13 +1,14 @@
 {
-  "name": "lipack520-whatsapp-bot",
-  "version": "1.0.0",
-  "description": "520Lipack WhatsApp 自动采购信息收集机器人",
-  "main": "app.js",
+  "name": "wa-customer-info-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "start": "node app.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
   },
-  "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.0"
+  "engines": {
+    "node": ">=20"
   }
 }
