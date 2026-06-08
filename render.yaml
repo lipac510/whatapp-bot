@@ -24,3 +24,15 @@ services:
         sync: false
       - key: META_APP_SECRET
         sync: false
+      - key: OKKI_API_BASE
+        value: https://api-sandbox.xiaoman.cn
+      - key: OKKI_SCOPE
+        value: company
+      - key: OKKI_CLIENT_ID
+        sync: false
+      - key: OKKI_CLIENT_SECRET
+        sync: false
+      - key: OKKI_ORIGIN_ID
+        sync: false
+      - key: OKKI_OWNER_USER_ID
+        sync: false

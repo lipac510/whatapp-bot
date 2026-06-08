@@ -36,11 +36,26 @@ export const config = {
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "",
   appSecret: process.env.META_APP_SECRET || "",
   businessName: process.env.BUSINESS_NAME || "Lipack Packaging",
-  dataDir: process.env.DATA_DIR || (process.env.RENDER ? "/tmp/wa-bot-data" : "data")
+  dataDir: process.env.DATA_DIR || (process.env.RENDER ? "/tmp/wa-bot-data" : "data"),
+  okkiApiBase: process.env.OKKI_API_BASE || "https://api-sandbox.xiaoman.cn",
+  okkiClientId: process.env.OKKI_CLIENT_ID || "",
+  okkiClientSecret: process.env.OKKI_CLIENT_SECRET || "",
+  okkiScope: process.env.OKKI_SCOPE || "company",
+  okkiOriginId: process.env.OKKI_ORIGIN_ID || "",
+  okkiOwnerUserId: process.env.OKKI_OWNER_USER_ID || ""
 };
 
 export function shouldVerifyWebhookSignature() {
   return Boolean(config.appSecret && !config.appSecret.includes("replace_with"));
+}
+
+export function hasOkkiConfig() {
+  return Boolean(
+    config.okkiClientId &&
+      !config.okkiClientId.includes("replace_with") &&
+      config.okkiClientSecret &&
+      !config.okkiClientSecret.includes("replace_with")
+  );
 }
 
 export function validateConfig() {

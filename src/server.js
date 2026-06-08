@@ -16,6 +16,7 @@ import {
   formatInquiryForLog,
   handleCustomerMessage
 } from "./conversation.js";
+import { createOkkiCustomerFromInquiry } from "./okki.js";
 import { extractIncomingMessages, sendTextMessage } from "./whatsapp.js";
 
 function sendJson(response, statusCode, payload) {
@@ -88,13 +89,31 @@ async function handleWebhookPost(request, response) {
       await markMessageProcessed(message.id);
 
       if (result.complete) {
-        await saveInquiry({
+        const inquiry = {
           customerId: message.from,
           profileName: result.session.profileName,
           ...result.inquiry
-        });
+        };
+        await saveInquiry(inquiry);
         await clearSession(message.from);
         console.log(`New inquiry from ${message.from}\n${formatInquiryForLog(result.inquiry)}`);
+
+        try {
+          const okki = await createOkkiCustomerFromInquiry(inquiry);
+          if (okki.enabled) {
+            console.log(`OKKI customer synced for ${message.from}`);
+          } else {
+            console.log("OKKI sync skipped because OKKI_CLIENT_ID/OKKI_CLIENT_SECRET are not configured");
+          }
+        } catch (okkiError) {
+          console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
+          await saveFailure({
+            messageId: message.id,
+            customerId: message.from,
+            text: message.text,
+            error: `OKKI sync failed: ${okkiError.message}`
+          });
+        }
       }
     } catch (error) {
       console.error(`Failed to process message ${message.id} from ${message.from}: ${error.message}`);
