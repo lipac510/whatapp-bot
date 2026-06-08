@@ -36,3 +36,9 @@ services:
         sync: false
       - key: OKKI_OWNER_USER_ID
         sync: false
+      - key: OKKI_INQUIRY_SUMMARY_FIELD_ID
+        sync: false
+      - key: OKKI_PURCHASE_QUANTITY_FIELD_ID
+        sync: false
+      - key: OKKI_INQUIRY_PRODUCT_FIELD_ID
+        sync: false

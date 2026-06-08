@@ -37,3 +37,20 @@ test("uses WhatsApp number as fallback contact name", () => {
 
   assert.equal(payload.customers[0].name, "8618014856231");
 });
+
+test("keeps email and WhatsApp out of inquiry summary remark", () => {
+  const payload = buildOkkiCompanyPayload({
+    customerId: "8618014856231",
+    profileName: "Buyer",
+    product: "Paper cup",
+    quantity: "5000",
+    address: "Dubai, UAE",
+    email: "buyer@example.com"
+  });
+
+  assert.match(payload.remark, /询盘产品：Paper cup/);
+  assert.match(payload.remark, /采购数量：5000/);
+  assert.match(payload.remark, /发货地址：Dubai, UAE/);
+  assert.doesNotMatch(payload.remark, /buyer@example.com/);
+  assert.doesNotMatch(payload.remark, /8618014856231/);
+});

@@ -19,6 +19,12 @@ function parseOriginList() {
     .filter((item) => Number.isFinite(item) && item > 0);
 }
 
+function setConfiguredField(target, fieldId, value) {
+  const key = String(fieldId || "").trim();
+  if (!key || value === "" || value === null || value === undefined) return;
+  target[key] = value;
+}
+
 async function getOkkiAccessToken() {
   if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) {
     return tokenCache.accessToken;
@@ -61,29 +67,25 @@ export function buildOkkiCompanyPayload(inquiry) {
   const originList = parseOriginList();
   const userId = Number(config.okkiOwnerUserId || 0);
 
-  const remark = [
-    "WhatsApp询盘",
+  const inquirySummary = [
     `询盘产品：${inquiry.product || ""}`,
     `采购数量：${inquiry.quantity || ""}`,
     `发货地址：${inquiry.address || ""}`,
-    `发货国家：${country || ""}`,
-    `Email：${inquiry.email || ""}`,
-    `WhatsApp：${phone.fullNumber}`,
-    inquiry.profileName ? `WhatsApp昵称：${inquiry.profileName}` : "",
     inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : ""
   ]
     .filter(Boolean)
     .join("\n");
 
-  return cleanObject({
+  const payload = cleanObject({
     company_id: 0,
     user_id: userId > 0 ? userId : undefined,
+    is_public: userId > 0 ? 0 : undefined,
     name: companyName,
     short_name: companyName,
     country,
     address: inquiry.address || "",
     origin_list: originList,
-    remark,
+    remark: inquirySummary,
     customers: [
       cleanObject({
         customer_id: 0,
@@ -93,10 +95,16 @@ export function buildOkkiCompanyPayload(inquiry) {
         tel: phone.localNumber,
         whatsapp: phone.fullNumber,
         main_customer_flag: 1,
-        remark
+        remark: inquirySummary
       })
     ]
   });
+
+  setConfiguredField(payload, config.okkiInquiryProductFieldId, inquiry.product || "");
+  setConfiguredField(payload, config.okkiPurchaseQuantityFieldId, inquiry.quantity || "");
+  setConfiguredField(payload, config.okkiInquirySummaryFieldId, inquirySummary);
+
+  return payload;
 }
 
 export async function createOkkiCustomerFromInquiry(inquiry) {
@@ -124,5 +132,56 @@ export async function createOkkiCustomerFromInquiry(inquiry) {
     enabled: true,
     payload,
     result
+  };
+}
+
+async function okkiGet(path, params = {}) {
+  const token = await getOkkiAccessToken();
+  const url = new URL(`${config.okkiApiBase}${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== "" && value !== undefined && value !== null) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: token
+    }
+  });
+  const result = await response.json().catch(() => ({}));
+  return {
+    ok: response.ok,
+    status: response.status,
+    result
+  };
+}
+
+async function safeDiagnostic(name, fn) {
+  try {
+    return { name, ...(await fn()) };
+  } catch (error) {
+    return { name, ok: false, error: error.message };
+  }
+}
+
+export async function getOkkiDiagnostics() {
+  if (!hasOkkiConfig()) {
+    return { enabled: false };
+  }
+
+  const checks = await Promise.all([
+    safeDiagnostic("company_fields", () => okkiGet("/v1/company/fields")),
+    safeDiagnostic("company_enums", () => okkiGet("/v1/company/companyEnums")),
+    safeDiagnostic("origin_list_selector", () =>
+      okkiGet("/v1/company/fields/selector", { field: "origin_list" })
+    ),
+    safeDiagnostic("origin_selector", () => okkiGet("/v1/company/fields/selector", { field: "origin" })),
+    safeDiagnostic("users", () => okkiGet("/v1/user/list"))
+  ]);
+
+  return {
+    enabled: true,
+    checks
   };
 }

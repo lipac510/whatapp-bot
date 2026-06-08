@@ -18,7 +18,7 @@ import {
   formatInquiryForLog,
   handleCustomerMessage
 } from "./conversation.js";
-import { createOkkiCustomerFromInquiry } from "./okki.js";
+import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
 import { extractIncomingMessages, sendTextMessage } from "./whatsapp.js";
 
 function sendJson(response, statusCode, payload) {
@@ -178,6 +178,11 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/okki-syncs") {
       sendJson(response, 200, await listOkkiSyncs());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/okki-diagnostics") {
+      sendJson(response, 200, await getOkkiDiagnostics());
       return;
     }
 
