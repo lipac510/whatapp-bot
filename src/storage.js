@@ -6,6 +6,7 @@ const sessionsPath = path.join(config.dataDir, "sessions.json");
 const inquiriesPath = path.join(config.dataDir, "inquiries.json");
 const processedMessagesPath = path.join(config.dataDir, "processed-messages.json");
 const failuresPath = path.join(config.dataDir, "failures.json");
+const okkiSyncsPath = path.join(config.dataDir, "okki-syncs.json");
 
 async function ensureDataDir() {
   await fs.mkdir(config.dataDir, { recursive: true });
@@ -85,4 +86,17 @@ export async function saveFailure(failure) {
 
 export async function listFailures() {
   return readJson(failuresPath, []);
+}
+
+export async function saveOkkiSync(sync) {
+  const syncs = await readJson(okkiSyncsPath, []);
+  syncs.push({
+    ...sync,
+    createdAt: new Date().toISOString()
+  });
+  await writeJson(okkiSyncsPath, syncs.slice(-200));
+}
+
+export async function listOkkiSyncs() {
+  return readJson(okkiSyncsPath, []);
 }

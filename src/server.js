@@ -7,9 +7,11 @@ import {
   isMessageProcessed,
   listFailures,
   listInquiries,
+  listOkkiSyncs,
   markMessageProcessed,
   saveFailure,
   saveInquiry,
+  saveOkkiSync,
   saveSession
 } from "./storage.js";
 import {
@@ -102,8 +104,20 @@ async function handleWebhookPost(request, response) {
           const okki = await createOkkiCustomerFromInquiry(inquiry);
           if (okki.enabled) {
             console.log(`OKKI customer synced for ${message.from}`);
+            await saveOkkiSync({
+              messageId: message.id,
+              customerId: message.from,
+              ok: true,
+              result: okki.result
+            });
           } else {
             console.log("OKKI sync skipped because OKKI_CLIENT_ID/OKKI_CLIENT_SECRET are not configured");
+            await saveOkkiSync({
+              messageId: message.id,
+              customerId: message.from,
+              ok: false,
+              skipped: true
+            });
           }
         } catch (okkiError) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
@@ -159,6 +173,11 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/failures") {
       sendJson(response, 200, await listFailures());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/okki-syncs") {
+      sendJson(response, 200, await listOkkiSyncs());
       return;
     }
 
