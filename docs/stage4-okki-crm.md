@@ -26,13 +26,16 @@ POST /v1/oauth2/access_token
 - `short_name`：同 `name`。
 - `country`：优先从发货地址识别；识别不到则从 WhatsApp 区号推断。
 - `address`：写入客户提供的发货地址，可空。
-- `origin_list`：客户来源。客户来源“社媒”的 ID 暂时未知，先通过 `OKKI_ORIGIN_ID` 配置，可留空。
-- `remark`：写入公司备注，包含产品、数量、地址、国家、Email、WhatsApp、图片链接、询盘简述。
+- `origin_list`：客户来源。当前目标为 OKKI 里的 `TK`。
+- `remark`：写入询盘摘要，包含产品、数量、地址、客户链接、图片链接、视频链接。
+- `OKKI_INQUIRY_PRODUCT_FIELD_ID`：写入 OKKI 的“询盘产品”字段。
+- `OKKI_PURCHASE_QUANTITY_FIELD_ID`：写入 OKKI 的“采购数量”字段。
+- `OKKI_INQUIRY_SUMMARY_FIELD_ID`：写入 OKKI 的“核心痛点 询盘简述”字段。
 
 联系人字段：
 
 - `name`：WhatsApp 昵称，可空。
-- `email`：客户 Email，可空。
+- `email`：不主动收集，保留为空。
 - `tel_area_code`：从 WhatsApp 号码推断。
 - `tel`：去掉国家区号后的号码。
 - `whatsapp`：完整 WhatsApp 号码。
@@ -47,15 +50,17 @@ POST /v1/oauth2/access_token
 OKKI_API_BASE=https://api-sandbox.xiaoman.cn
 OKKI_CLIENT_ID=你的OKKI client_id
 OKKI_CLIENT_SECRET=你的OKKI client_secret
-OKKI_SCOPE=company
-OKKI_ORIGIN_ID=社媒来源ID，可先留空
-OKKI_OWNER_USER_ID=跟进人ID，可先留空
+OKKI_SCOPE=company user
+OKKI_ORIGIN_ID=TK来源ID
+OKKI_OWNER_USER_ID=跟进人ID
+OKKI_INQUIRY_SUMMARY_FIELD_ID=核心痛点询盘简述字段ID
+OKKI_PURCHASE_QUANTITY_FIELD_ID=采购数量字段ID
+OKKI_INQUIRY_PRODUCT_FIELD_ID=询盘产品字段ID
 ```
 
 不要把 `OKKI_CLIENT_SECRET` 发到聊天或提交到 GitHub。
 
 ## 当前限制
 
-- 客户来源“社媒”的 ID 暂时未知；留空时不会写入来源。
-- 图片处理还没有完成。后续需要先下载 WhatsApp 图片，再上传到可访问位置，然后把图片链接写入 `remark`。
-- 当前 Email 仍沿用 WhatsApp 机器人已有流程收集。后续可改为允许客户回复“跳过”。
+- 图片和视频目前使用 Render 代理链接。真实客户高频发送大文件后，建议改为 Cloudflare R2、S3 或 OSS 永久存储。
+- 重复客户目前会被 OKKI 拒绝创建。后续需要改成“号码已存在时更新原客户”。

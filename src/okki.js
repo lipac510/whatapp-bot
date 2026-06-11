@@ -71,7 +71,9 @@ export function buildOkkiCompanyPayload(inquiry) {
     `询盘产品：${inquiry.product || ""}`,
     `采购数量：${inquiry.quantity || ""}`,
     `发货地址：${inquiry.address || ""}`,
-    inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : ""
+    inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
+    inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
+    inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
   ]
     .filter(Boolean)
     .join("\n");

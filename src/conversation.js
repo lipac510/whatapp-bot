@@ -1,18 +1,31 @@
-const steps = ["product", "quantity", "address", "email"];
+const steps = ["product", "quantity", "address"];
 
 const prompts = {
-  product: "您好，感谢联系 Lipack Packaging。请问您需要采购什么产品？",
-  quantity: "好的。请问采购数量是多少？",
-  address: "请提供完整发货地址，并包含国家名。",
-  email: "请提供您的 Email，方便我们发送报价单。"
+  product: [
+    "Thanks for reaching out to Lipack.",
+    "",
+    "We are a 20-year paper box & paper bag factory, exporting to 150+ countries and serving 5,000+ brands.",
+    "FSC & SGS certified. Supplier to Disney for 15+ years.",
+    "",
+    "What type of packaging are you looking for?",
+    "1. Corrugated Box, rough range: $0.5-$1.5/pc",
+    "2. Luxury Rigid Box, rough range: $1.5-$3/pc",
+    "3. Paper Bag, rough range: $0.1-$0.6/pc",
+    "4. Other",
+    "",
+    "Please reply with a number, or send product photos/videos/links."
+  ].join("\n"),
+  quantity: "Great. What quantity do you need?\nYou can reply like: 1000 pcs.",
+  address: "Which country should we ship to?\nIf possible, please share the full delivery address so we can estimate shipping more accurately."
 };
 
 const labels = {
   product: "采购产品",
   quantity: "采购数量",
-  address: "发货地址",
-  email: "Email"
+  address: "发货地址"
 };
+
+const urlPattern = /https?:\/\/[^\s<>"'，。；、]+/gi;
 
 function normalizeText(text) {
   return String(text || "").trim();
@@ -22,8 +35,17 @@ function isRestart(text) {
   return /^(restart|reset|重新开始|重来|开始)$/i.test(normalizeText(text));
 }
 
-function looksLikeEmail(text) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeText(text));
+function isBotQuestion(text) {
+  return /\b(bot|robot|ai|human|real person|real human)\b/i.test(normalizeText(text)) ||
+    /机器人|真人|人工客服/.test(normalizeText(text));
+}
+
+function validationMessage(step, text) {
+  if (text) return "";
+  if (step === "product") return "Please tell us the product you are looking for.";
+  if (step === "quantity") return "Please tell us the quantity you need.";
+  if (step === "address") return "Please share your destination country or shipping address.";
+  return "Please send your answer.";
 }
 
 function nextStep(currentStep) {
@@ -31,16 +53,29 @@ function nextStep(currentStep) {
   return steps[index + 1] || null;
 }
 
+function mergeUnique(existing = [], incoming = []) {
+  return [...new Set([...existing, ...incoming].filter(Boolean))];
+}
+
+function extractLinks(text) {
+  return normalizeText(text).match(urlPattern) || [];
+}
+
 function buildSummary(data) {
+  const imageCount = data.imageLinks?.length || 0;
+  const videoCount = data.videoLinks?.length || 0;
+  const linkCount = data.customerLinks?.length || 0;
   return [
-    "已收到，谢谢！我们会尽快为您报价。",
+    "Thank you. We have received your inquiry and will prepare a quotation as soon as possible.",
     "",
-    "询盘信息：",
-    `采购产品：${data.product}`,
-    `采购数量：${data.quantity}`,
-    `发货地址：${data.address}`,
-    `Email：${data.email}`
-  ].join("\n");
+    "Inquiry details:",
+    `Product: ${data.product}`,
+    `Quantity: ${data.quantity}`,
+    `Shipping address: ${data.address}`,
+    imageCount ? `Photos received: ${imageCount}` : "",
+    videoCount ? `Videos received: ${videoCount}` : "",
+    linkCount ? `Links received: ${linkCount}` : ""
+  ].filter((line) => line !== "").join("\n");
 }
 
 export function startConversation(profileName = "") {
@@ -48,7 +83,11 @@ export function startConversation(profileName = "") {
     session: {
       step: "product",
       profileName,
-      data: {},
+      data: {
+        imageLinks: [],
+        videoLinks: [],
+        customerLinks: []
+      },
       startedAt: new Date().toISOString()
     },
     replies: [prompts.product],
@@ -67,7 +106,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     return {
       session,
       replies: [
-        "我们已经收到您的询盘信息。若需要重新提交，请回复“重新开始”。"
+        "We have already received your inquiry. To submit a new one, please reply \"restart\"."
       ],
       complete: false
     };
@@ -75,10 +114,21 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
 
   const step = session.step;
 
-  if (step === "email" && !looksLikeEmail(text)) {
+  if (isBotQuestion(text)) {
     return {
       session,
-      replies: ["这个 Email 格式看起来不太对，请重新发送一个有效 Email。"],
+      replies: [
+        `I am Lipack's automated assistant, here to collect your inquiry details quickly. Our sales team will review your request and follow up with you soon.\n\n${prompts[step]}`
+      ],
+      complete: false
+    };
+  }
+
+  const invalidMessage = validationMessage(step, text);
+  if (invalidMessage) {
+    return {
+      session,
+      replies: [invalidMessage],
       complete: false
     };
   }
@@ -88,6 +138,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     profileName: session.profileName || profileName,
     data: {
       ...session.data,
+      customerLinks: mergeUnique(session.data?.customerLinks, extractLinks(text)),
       [step]: text
     }
   };
@@ -118,6 +169,47 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   };
 }
 
+export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "") {
+  const activeSession = session || startConversation(profileName).session;
+  const key = attachmentType === "video" ? "videoLinks" : "imageLinks";
+  const label = attachmentType === "video" ? "video" : "photo";
+  const updated = {
+    ...activeSession,
+    profileName: activeSession.profileName || profileName,
+    data: {
+      ...activeSession.data,
+      [key]: mergeUnique(activeSession.data?.[key], [attachmentLink])
+    }
+  };
+
+  if (updated.step === "complete") {
+    return {
+      session: updated,
+      replies: [`Your ${label} has been received. If this is a new inquiry, please reply "restart" first.`],
+      complete: false
+    };
+  }
+
+  return {
+    session: updated,
+    replies: [`Your ${label} has been received. You can continue sending attachments.\n\n${prompts[updated.step]}`],
+    complete: false
+  };
+}
+
+export function handleCustomerImage(session, imageLink, profileName = "") {
+  return handleCustomerAttachment(session, "image", imageLink, profileName);
+}
+
+export function handleCustomerVideo(session, videoLink, profileName = "") {
+  return handleCustomerAttachment(session, "video", videoLink, profileName);
+}
+
 export function formatInquiryForLog(inquiry) {
-  return steps.map((step) => `${labels[step]}：${inquiry[step] || ""}`).join("\n");
+  return [
+    ...steps.map((step) => `${labels[step]}：${inquiry[step] || ""}`),
+    inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
+    inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : "",
+    inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : ""
+  ].filter(Boolean).join("\n");
 }

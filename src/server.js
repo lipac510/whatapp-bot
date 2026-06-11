@@ -16,14 +16,36 @@ import {
 } from "./storage.js";
 import {
   formatInquiryForLog,
-  handleCustomerMessage
+  handleCustomerImage,
+  handleCustomerMessage,
+  handleCustomerVideo
 } from "./conversation.js";
 import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
-import { extractIncomingMessages, sendTextMessage } from "./whatsapp.js";
+import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp.js";
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json" });
   response.end(JSON.stringify(payload, null, 2));
+}
+
+function getPublicBaseUrl(request) {
+  if (config.publicBaseUrl) return config.publicBaseUrl.replace(/\/$/, "");
+  const protocol = request.headers["x-forwarded-proto"] || "https";
+  return `${protocol}://${request.headers.host}`;
+}
+
+function buildMediaUrl(request, mediaId) {
+  return `${getPublicBaseUrl(request)}/media/${encodeURIComponent(mediaId)}`;
+}
+
+function handleParsedMessage(request, session, message) {
+  if (message.type === "image" && message.mediaId) {
+    return handleCustomerImage(session, buildMediaUrl(request, message.mediaId), message.profileName);
+  }
+  if (message.type === "video" && message.mediaId) {
+    return handleCustomerVideo(session, buildMediaUrl(request, message.mediaId), message.profileName);
+  }
+  return handleCustomerMessage(session, message.text, message.profileName);
 }
 
 async function readRequestBody(request) {
@@ -81,7 +103,7 @@ async function handleWebhookPost(request, response) {
       }
 
       const session = await getSession(message.from);
-      const result = handleCustomerMessage(session, message.text, message.profileName);
+      const result = handleParsedMessage(request, session, message);
 
       for (const reply of result.replies) {
         await sendTextMessage(message.from, reply);
@@ -124,7 +146,7 @@ async function handleWebhookPost(request, response) {
           await saveFailure({
             messageId: message.id,
             customerId: message.from,
-            text: message.text,
+            text: message.text || message.type,
             error: `OKKI sync failed: ${okkiError.message}`
           });
         }
@@ -134,7 +156,7 @@ async function handleWebhookPost(request, response) {
       await saveFailure({
         messageId: message.id,
         customerId: message.from,
-        text: message.text,
+        text: message.text || message.type,
         error: error.message
       });
     }
@@ -158,6 +180,17 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/webhook") {
       verifyWebhook(request, response, url);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/media/")) {
+      const mediaId = decodeURIComponent(url.pathname.slice("/media/".length));
+      const media = await fetchMedia(mediaId);
+      response.writeHead(200, {
+        "Content-Type": media.contentType,
+        "Cache-Control": "public, max-age=300"
+      });
+      response.end(media.body);
       return;
     }
 

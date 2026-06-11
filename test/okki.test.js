@@ -9,7 +9,10 @@ test("builds OKKI customer payload from inquiry", () => {
     product: "Paper cup",
     quantity: "5000",
     address: "Dubai, UAE",
-    email: "buyer@example.com"
+    email: "buyer@example.com",
+    customerLinks: ["https://example.com/product"],
+    imageLinks: ["https://example.com/media/image"],
+    videoLinks: ["https://example.com/media/video"]
   });
 
   assert.equal(payload.company_id, 0);
@@ -24,6 +27,9 @@ test("builds OKKI customer payload from inquiry", () => {
   assert.equal(payload.customers[0].main_customer_flag, 1);
   assert.match(payload.remark, /询盘产品：Paper cup/);
   assert.match(payload.remark, /采购数量：5000/);
+  assert.match(payload.remark, /客户链接：https:\/\/example.com\/product/);
+  assert.match(payload.remark, /图片链接：https:\/\/example.com\/media\/image/);
+  assert.match(payload.remark, /视频链接：https:\/\/example.com\/media\/video/);
 });
 
 test("uses WhatsApp number as fallback contact name", () => {
