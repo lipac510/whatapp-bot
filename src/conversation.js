@@ -1,4 +1,10 @@
+import {
+  isHighValueQuantity,
+  normalizeProductAnswer
+} from "./rules.js";
+
 const steps = ["product", "quantity", "address"];
+const minimumFastTrackQuantity = 5000;
 
 const prompts = {
   product: [
@@ -46,6 +52,15 @@ function validationMessage(step, text) {
   if (step === "quantity") return "Please tell us the quantity you need.";
   if (step === "address") return "Please share your destination country or shipping address.";
   return "Please send your answer.";
+}
+
+function validateStepAnswer(step, text) {
+  const emptyMessage = validationMessage(step, text);
+  if (emptyMessage) return emptyMessage;
+  if (step === "product" && !normalizeProductAnswer(text)) {
+    return "Please reply with 1, 2, 3, or 4, or tell us the packaging product you need.";
+  }
+  return "";
 }
 
 function nextStep(currentStep) {
@@ -113,6 +128,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   }
 
   const step = session.step;
+  const customerLinks = mergeUnique(session.data?.customerLinks, extractLinks(text));
 
   if (isBotQuestion(text)) {
     return {
@@ -124,10 +140,18 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     };
   }
 
-  const invalidMessage = validationMessage(step, text);
+  const invalidMessage = validateStepAnswer(step, text);
   if (invalidMessage) {
     return {
-      session,
+      session: customerLinks.length
+        ? {
+            ...session,
+            data: {
+              ...session.data,
+              customerLinks
+            }
+          }
+        : session,
       replies: [invalidMessage],
       complete: false
     };
@@ -138,10 +162,29 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     profileName: session.profileName || profileName,
     data: {
       ...session.data,
-      customerLinks: mergeUnique(session.data?.customerLinks, extractLinks(text)),
-      [step]: text
+      customerLinks,
+      [step]: step === "product" ? normalizeProductAnswer(text) : text
     }
   };
+
+  if (step === "quantity" && isHighValueQuantity(text, minimumFastTrackQuantity)) {
+    const completed = {
+      ...updated,
+      fastTrack: true,
+      step: "complete",
+      completedAt: new Date().toISOString()
+    };
+
+    return {
+      session: completed,
+      replies: [buildSummary(completed.data)],
+      complete: true,
+      inquiry: {
+        ...completed.data,
+        fastTrack: true
+      }
+    };
+  }
 
   const upcoming = nextStep(step);
   if (!upcoming) {

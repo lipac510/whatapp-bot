@@ -70,7 +70,7 @@ export function buildOkkiCompanyPayload(inquiry) {
   const inquirySummary = [
     `询盘产品：${inquiry.product || ""}`,
     `采购数量：${inquiry.quantity || ""}`,
-    `发货地址：${inquiry.address || ""}`,
+    `发货地址：${inquiry.address || "not provided yet"}`,
     inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
     inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
     inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
@@ -86,6 +86,8 @@ export function buildOkkiCompanyPayload(inquiry) {
     short_name: companyName,
     country,
     address: inquiry.address || "",
+    tel_area_code: phone.telAreaCode,
+    tel: phone.localNumber,
     origin_list: originList,
     remark: inquirySummary,
     customers: [

@@ -4,10 +4,12 @@ import { config, shouldVerifyWebhookSignature, validateConfig } from "./config.j
 import {
   clearSession,
   getSession,
+  isKnownCustomer,
   isMessageProcessed,
   listFailures,
   listInquiries,
   listOkkiSyncs,
+  markKnownCustomer,
   markMessageProcessed,
   saveFailure,
   saveInquiry,
@@ -21,6 +23,14 @@ import {
   handleCustomerVideo
 } from "./conversation.js";
 import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
+import { inferCountry } from "./country.js";
+import {
+  existingCustomerReply,
+  isOfficialCodeMessage,
+  isRestrictedCountry,
+  noShippingAgentReply,
+  parseQuantity
+} from "./rules.js";
 import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp.js";
 
 function sendJson(response, statusCode, payload) {
@@ -46,6 +56,23 @@ function handleParsedMessage(request, session, message) {
     return handleCustomerVideo(session, buildMediaUrl(request, message.mediaId), message.profileName);
   }
   return handleCustomerMessage(session, message.text, message.profileName);
+}
+
+function shouldRejectInquiry(inquiry) {
+  const country = inferCountry({
+    address: inquiry.address,
+    phone: inquiry.customerId
+  });
+  const quantity = parseQuantity(inquiry.quantity);
+  return {
+    country,
+    quantity,
+    rejected: isRestrictedCountry(country) && quantity < 20000
+  };
+}
+
+function isExistingCustomerError(message) {
+  return /已存在|already exists|exist/i.test(String(message || ""));
 }
 
 async function readRequestBody(request) {
@@ -102,12 +129,25 @@ async function handleWebhookPost(request, response) {
         continue;
       }
 
+      if (message.type === "text" && isOfficialCodeMessage(message.text)) {
+        await saveInquiry({
+          customerId: message.from,
+          profileName: message.profileName,
+          type: "official_code_or_notice",
+          message: message.text
+        });
+        await markMessageProcessed(message.id);
+        continue;
+      }
+
+      if (await isKnownCustomer(message.from)) {
+        await sendTextMessage(message.from, existingCustomerReply);
+        await markMessageProcessed(message.id);
+        continue;
+      }
+
       const session = await getSession(message.from);
       const result = handleParsedMessage(request, session, message);
-
-      for (const reply of result.replies) {
-        await sendTextMessage(message.from, reply);
-      }
 
       await saveSession(message.from, result.session);
       await markMessageProcessed(message.id);
@@ -122,10 +162,27 @@ async function handleWebhookPost(request, response) {
         await clearSession(message.from);
         console.log(`New inquiry from ${message.from}\n${formatInquiryForLog(result.inquiry)}`);
 
+        const rejection = shouldRejectInquiry(inquiry);
+        if (rejection.rejected) {
+          await sendTextMessage(message.from, noShippingAgentReply);
+          await saveFailure({
+            messageId: message.id,
+            customerId: message.from,
+            text: message.text || message.type,
+            error: `Restricted country skipped: ${rejection.country}, quantity ${rejection.quantity}`
+          });
+          continue;
+        }
+
+        for (const reply of result.replies) {
+          await sendTextMessage(message.from, reply);
+        }
+
         try {
           const okki = await createOkkiCustomerFromInquiry(inquiry);
           if (okki.enabled) {
             console.log(`OKKI customer synced for ${message.from}`);
+            await markKnownCustomer(message.from, "okki_synced");
             await saveOkkiSync({
               messageId: message.id,
               customerId: message.from,
@@ -143,12 +200,20 @@ async function handleWebhookPost(request, response) {
           }
         } catch (okkiError) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
+          if (isExistingCustomerError(okkiError.message)) {
+            await markKnownCustomer(message.from, "okki_existing");
+            await sendTextMessage(message.from, existingCustomerReply);
+          }
           await saveFailure({
             messageId: message.id,
             customerId: message.from,
             text: message.text || message.type,
             error: `OKKI sync failed: ${okkiError.message}`
           });
+        }
+      } else {
+        for (const reply of result.replies) {
+          await sendTextMessage(message.from, reply);
         }
       }
     } catch (error) {

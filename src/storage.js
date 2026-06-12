@@ -7,6 +7,7 @@ const inquiriesPath = path.join(config.dataDir, "inquiries.json");
 const processedMessagesPath = path.join(config.dataDir, "processed-messages.json");
 const failuresPath = path.join(config.dataDir, "failures.json");
 const okkiSyncsPath = path.join(config.dataDir, "okki-syncs.json");
+const knownCustomersPath = path.join(config.dataDir, "known-customers.json");
 
 async function ensureDataDir() {
   await fs.mkdir(config.dataDir, { recursive: true });
@@ -99,4 +100,18 @@ export async function saveOkkiSync(sync) {
 
 export async function listOkkiSyncs() {
   return readJson(okkiSyncsPath, []);
+}
+
+export async function isKnownCustomer(customerId) {
+  const knownCustomers = await readJson(knownCustomersPath, {});
+  return Boolean(knownCustomers[customerId]);
+}
+
+export async function markKnownCustomer(customerId, reason = "okki") {
+  const knownCustomers = await readJson(knownCustomersPath, {});
+  knownCustomers[customerId] = {
+    reason,
+    updatedAt: new Date().toISOString()
+  };
+  await writeJson(knownCustomersPath, knownCustomers);
 }

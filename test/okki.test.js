@@ -19,6 +19,8 @@ test("builds OKKI customer payload from inquiry", () => {
   assert.equal(payload.name, "8618014856231");
   assert.equal(payload.country, "AE");
   assert.equal(payload.address, "Dubai, UAE");
+  assert.equal(payload.tel_area_code, "86");
+  assert.equal(payload.tel, "18014856231");
   assert.equal(payload.customers[0].name, "Buyer");
   assert.equal(payload.customers[0].email, "buyer@example.com");
   assert.equal(payload.customers[0].tel_area_code, "86");
