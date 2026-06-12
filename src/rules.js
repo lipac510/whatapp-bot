@@ -11,7 +11,7 @@ const urlOnlyPattern = /^https?:\/\/\S+$/i;
 const numberOnlyPattern = /^\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?$/i;
 
 const officialCodePattern =
-  /(verification code|verify code|security code|login code|验证码|校验码|动态码|one-time password|otp|meta|facebook|whatsapp|okki)/i;
+  /(\d{4,8}\s*(是你的|is your).{0,40}(facebook|instagram).{0,40}(验证码|code|confirmation code)|verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|验证码|校验码|动态码|one-time password|otp|meta|facebook|instagram|whatsapp|okki)/i;
 
 const restrictedCountries = new Set([
   "IN",

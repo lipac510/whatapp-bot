@@ -63,16 +63,20 @@ test("keeps email and WhatsApp out of inquiry summary remark", () => {
   assert.doesNotMatch(payload.remark, /8618014856231/);
 });
 
-test("builds OKKI payload for official notices", () => {
+test("builds OKKI payload for official notices without duplicate phone fields", () => {
   const payload = buildOkkiCompanyPayload({
     customerId: "8618014856231",
     profileName: "Meta",
+    officialNotice: true,
+    companyName: "Official notice - 8618014856231 - 2026-06-12T00-00-00-000Z",
     product: "Official message",
-    quantity: "N/A",
+    quantity: "",
     summaryOverride: "Official message / verification code:\nYour code is 123456"
   });
 
-  assert.equal(payload.name, "8618014856231");
+  assert.equal(payload.name, "Official notice - 8618014856231 - 2026-06-12T00-00-00-000Z");
   assert.equal(payload.remark, "Official message / verification code:\nYour code is 123456");
-  assert.equal(payload.customers[0].tel, "18014856231");
+  assert.equal(payload.tel, undefined);
+  assert.equal(payload.customers[0].tel, undefined);
+  assert.equal(payload.customers[0].whatsapp, undefined);
 });

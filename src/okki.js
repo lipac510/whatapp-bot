@@ -63,6 +63,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     address: inquiry.address,
     phone: inquiry.customerId
   });
+  const isOfficialNotice = Boolean(inquiry.officialNotice);
   const companyName = inquiry.companyName || phone.fullNumber;
   const originList = parseOriginList();
   const userId = Number(config.okkiOwnerUserId || 0);
@@ -88,8 +89,8 @@ export function buildOkkiCompanyPayload(inquiry) {
     short_name: companyName,
     country,
     address: inquiry.address || "",
-    tel_area_code: phone.telAreaCode,
-    tel: phone.localNumber,
+    tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
+    tel: isOfficialNotice ? undefined : phone.localNumber,
     origin_list: originList,
     remark: inquirySummary,
     customers: [
@@ -97,17 +98,19 @@ export function buildOkkiCompanyPayload(inquiry) {
         customer_id: 0,
         name: inquiry.profileName || phone.fullNumber,
         email: inquiry.email || "",
-        tel_area_code: phone.telAreaCode,
-        tel: phone.localNumber,
-        whatsapp: phone.fullNumber,
+        tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
+        tel: isOfficialNotice ? undefined : phone.localNumber,
+        whatsapp: isOfficialNotice ? undefined : phone.fullNumber,
         main_customer_flag: 1,
         remark: inquirySummary
       })
     ]
   });
 
-  setConfiguredField(payload, config.okkiInquiryProductFieldId, inquiry.product || "");
-  setConfiguredField(payload, config.okkiPurchaseQuantityFieldId, inquiry.quantity || "");
+  if (!isOfficialNotice) {
+    setConfiguredField(payload, config.okkiInquiryProductFieldId, inquiry.product || "");
+    setConfiguredField(payload, config.okkiPurchaseQuantityFieldId, inquiry.quantity || "");
+  }
   setConfiguredField(payload, config.okkiInquirySummaryFieldId, inquirySummary);
 
   return payload;

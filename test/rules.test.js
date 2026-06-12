@@ -29,6 +29,10 @@ test("parses quantities", () => {
 
 test("detects official code messages", () => {
   assert.equal(isOfficialCodeMessage("Your WhatsApp verification code is 123456"), true);
+  assert.equal(isOfficialCodeMessage("123456 是你的Facebook 验证码"), true);
+  assert.equal(isOfficialCodeMessage("123456 是你的Instagram 验证码"), true);
+  assert.equal(isOfficialCodeMessage("123456 is your Instagram code, don't share it."), true);
+  assert.equal(isOfficialCodeMessage("123456 is your Facebook confirmation code."), true);
 });
 
 test("detects restricted countries", () => {

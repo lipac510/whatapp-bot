@@ -130,15 +130,23 @@ async function handleWebhookPost(request, response) {
       }
 
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
+        const noticeTime = new Date().toISOString().replace(/[:.]/g, "-");
         const officialNotice = {
           customerId: message.from,
           profileName: message.profileName,
           type: "official_code_or_notice",
+          officialNotice: true,
+          companyName: `Official notice - ${message.from} - ${noticeTime}`,
           product: "Official message",
-          quantity: "N/A",
+          quantity: "",
           address: "",
           message: message.text,
-          summaryOverride: `Official message / verification code:\n${message.text}`
+          summaryOverride: [
+            "Official message / verification code",
+            `WhatsApp number: ${message.from}`,
+            `Sender name: ${message.profileName || ""}`,
+            `Message: ${message.text}`
+          ].join("\n")
         };
         await saveInquiry(officialNotice);
         try {
