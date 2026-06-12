@@ -174,10 +174,6 @@ async function handleWebhookPost(request, response) {
           continue;
         }
 
-        for (const reply of result.replies) {
-          await sendTextMessage(message.from, reply);
-        }
-
         try {
           const okki = await createOkkiCustomerFromInquiry(inquiry);
           if (okki.enabled) {
@@ -198,11 +194,19 @@ async function handleWebhookPost(request, response) {
               skipped: true
             });
           }
+
+          for (const reply of result.replies) {
+            await sendTextMessage(message.from, reply);
+          }
         } catch (okkiError) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
           if (isExistingCustomerError(okkiError.message)) {
             await markKnownCustomer(message.from, "okki_existing");
             await sendTextMessage(message.from, existingCustomerReply);
+          } else {
+            for (const reply of result.replies) {
+              await sendTextMessage(message.from, reply);
+            }
           }
           await saveFailure({
             messageId: message.id,
