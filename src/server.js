@@ -130,12 +130,37 @@ async function handleWebhookPost(request, response) {
       }
 
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
-        await saveInquiry({
+        const officialNotice = {
           customerId: message.from,
           profileName: message.profileName,
           type: "official_code_or_notice",
-          message: message.text
-        });
+          product: "Official message",
+          quantity: "N/A",
+          address: "",
+          message: message.text,
+          summaryOverride: `Official message / verification code:\n${message.text}`
+        };
+        await saveInquiry(officialNotice);
+        try {
+          const okki = await createOkkiCustomerFromInquiry(officialNotice);
+          if (okki.enabled) {
+            await markKnownCustomer(message.from, "official_notice_synced");
+            await saveOkkiSync({
+              messageId: message.id,
+              customerId: message.from,
+              ok: true,
+              officialNotice: true,
+              result: okki.result
+            });
+          }
+        } catch (okkiError) {
+          await saveFailure({
+            messageId: message.id,
+            customerId: message.from,
+            text: message.text,
+            error: `OKKI official notice sync failed: ${okkiError.message}`
+          });
+        }
         await markMessageProcessed(message.id);
         continue;
       }

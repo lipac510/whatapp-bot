@@ -67,16 +67,18 @@ export function buildOkkiCompanyPayload(inquiry) {
   const originList = parseOriginList();
   const userId = Number(config.okkiOwnerUserId || 0);
 
-  const inquirySummary = [
-    `询盘产品：${inquiry.product || ""}`,
-    `采购数量：${inquiry.quantity || ""}`,
-    `发货地址：${inquiry.address || "not provided yet"}`,
-    inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
-    inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
-    inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const inquirySummary =
+    inquiry.summaryOverride ||
+    [
+      `询盘产品：${inquiry.product || ""}`,
+      `采购数量：${inquiry.quantity || ""}`,
+      `发货地址：${inquiry.address || "not provided yet"}`,
+      inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
+      inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
+      inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
+    ]
+      .filter(Boolean)
+      .join("\n");
 
   const payload = cleanObject({
     company_id: 0,
