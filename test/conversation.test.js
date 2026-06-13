@@ -11,6 +11,8 @@ test("collects product, quantity, and address", () => {
   let result = startConversation("Alice");
   assert.equal(result.session.step, "product");
   assert.equal(result.complete, false);
+  assert.match(result.replies[0], /Hello! Welcome! 😊 I'm Ans/);
+  assert.match(result.replies[0], /For catalog 👉 www\.cnlipack\.com/);
 
   result = handleCustomerMessage(result.session, "1", "Alice");
   assert.equal(result.session.step, "quantity");
@@ -28,7 +30,9 @@ test("collects product, quantity, and address", () => {
   });
   assert.match(result.replies[0], /Inquiry details:/);
   assert.match(result.replies[0], /Product: Corrugated Box/);
-  assert.match(result.replies[0], /within the same business day/);
+  assert.match(result.replies[0], /😊 Thank you\. We have received your inquiry\./);
+  assert.match(result.replies[0], /Shipping address:/);
+  assert.match(result.replies[0], /👉 Working hours:Monday-Friday, 9:00-18:00,China time\./);
 });
 
 test("answers bot questions without advancing", () => {
@@ -49,6 +53,7 @@ test("answers catalog questions and keeps collecting product", () => {
   assert.equal(result.complete, false);
   assert.match(result.replies[0], /www\.cnlipack\.com/);
   assert.match(result.replies[0], /What type of packaging/);
+  assert.doesNotMatch(result.replies[0], /Hello! Welcome/);
 });
 
 test("answers location and MOQ questions without advancing", () => {

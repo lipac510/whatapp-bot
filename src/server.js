@@ -3,29 +3,36 @@ import crypto from "node:crypto";
 import { config, shouldVerifyWebhookSignature, validateConfig } from "./config.js";
 import {
   clearSession,
+  getHandoffWindow,
   getSession,
   isKnownCustomer,
   isMessageProcessed,
   listFailures,
   listInquiries,
   listOkkiSyncs,
+  markEmmaReplySent,
+  markHandoffReminderSent,
+  markHandoffWindow,
   markKnownCustomer,
   markMessageProcessed,
   saveFailure,
   saveInquiry,
   saveOkkiSync,
-  saveSession
+  saveSession,
+  wasEmmaReplySent
 } from "./storage.js";
 import {
   formatInquiryForLog,
   handleCustomerImage,
   handleCustomerMessage,
-  handleCustomerVideo
+  handleCustomerVideo,
+  handoffReminderMessage
 } from "./conversation.js";
 import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
 import { inferCountry } from "./country.js";
 import {
   existingCustomerReply,
+  isHumanHandoffRequest,
   isOfficialCodeMessage,
   isRestrictedCountry,
   noShippingAgentReply,
@@ -73,6 +80,31 @@ function shouldRejectInquiry(inquiry) {
 
 function isExistingCustomerError(message) {
   return /已存在|already exists|exist/i.test(String(message || ""));
+}
+
+function isWithinHours(isoDate, hours) {
+  const time = new Date(isoDate).getTime();
+  if (!Number.isFinite(time)) return false;
+  return Date.now() - time < hours * 60 * 60 * 1000;
+}
+
+async function sendEmmaReplyOnce(customerId, reason) {
+  if (await wasEmmaReplySent(customerId)) return false;
+  await sendTextMessage(customerId, existingCustomerReply);
+  await markEmmaReplySent(customerId, reason);
+  return true;
+}
+
+async function handleRecentHandoffWindow(customerId) {
+  const handoff = await getHandoffWindow(customerId);
+  if (!handoff || !isWithinHours(handoff.completedAt, 6)) return false;
+
+  if (!handoff.reminderSent) {
+    await sendTextMessage(customerId, handoffReminderMessage);
+    await markHandoffReminderSent(customerId);
+  }
+
+  return true;
 }
 
 async function readRequestBody(request) {
@@ -173,8 +205,19 @@ async function handleWebhookPost(request, response) {
         continue;
       }
 
+      if (message.type === "text" && isHumanHandoffRequest(message.text)) {
+        await sendEmmaReplyOnce(message.from, "manual_handoff_requested");
+        await markMessageProcessed(message.id);
+        continue;
+      }
+
+      if (await handleRecentHandoffWindow(message.from)) {
+        await markMessageProcessed(message.id);
+        continue;
+      }
+
       if (await isKnownCustomer(message.from)) {
-        await sendTextMessage(message.from, existingCustomerReply);
+        await sendEmmaReplyOnce(message.from, "existing_customer");
         await markMessageProcessed(message.id);
         continue;
       }
@@ -212,6 +255,7 @@ async function handleWebhookPost(request, response) {
           if (okki.enabled) {
             console.log(`OKKI customer synced for ${message.from}`);
             await markKnownCustomer(message.from, "okki_synced");
+            await markHandoffWindow(message.from);
             await saveOkkiSync({
               messageId: message.id,
               customerId: message.from,
@@ -235,7 +279,7 @@ async function handleWebhookPost(request, response) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
           if (isExistingCustomerError(okkiError.message)) {
             await markKnownCustomer(message.from, "okki_existing");
-            await sendTextMessage(message.from, existingCustomerReply);
+            await sendEmmaReplyOnce(message.from, "okki_existing");
           } else {
             for (const reply of result.replies) {
               await sendTextMessage(message.from, reply);

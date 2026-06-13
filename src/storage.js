@@ -8,6 +8,8 @@ const processedMessagesPath = path.join(config.dataDir, "processed-messages.json
 const failuresPath = path.join(config.dataDir, "failures.json");
 const okkiSyncsPath = path.join(config.dataDir, "okki-syncs.json");
 const knownCustomersPath = path.join(config.dataDir, "known-customers.json");
+const handoffWindowsPath = path.join(config.dataDir, "handoff-windows.json");
+const emmaRepliesPath = path.join(config.dataDir, "emma-replies.json");
 
 async function ensureDataDir() {
   await fs.mkdir(config.dataDir, { recursive: true });
@@ -114,4 +116,42 @@ export async function markKnownCustomer(customerId, reason = "okki") {
     updatedAt: new Date().toISOString()
   };
   await writeJson(knownCustomersPath, knownCustomers);
+}
+
+export async function getHandoffWindow(customerId) {
+  const handoffWindows = await readJson(handoffWindowsPath, {});
+  return handoffWindows[customerId] || null;
+}
+
+export async function markHandoffWindow(customerId) {
+  const handoffWindows = await readJson(handoffWindowsPath, {});
+  handoffWindows[customerId] = {
+    completedAt: new Date().toISOString(),
+    reminderSent: false
+  };
+  await writeJson(handoffWindowsPath, handoffWindows);
+}
+
+export async function markHandoffReminderSent(customerId) {
+  const handoffWindows = await readJson(handoffWindowsPath, {});
+  handoffWindows[customerId] = {
+    ...(handoffWindows[customerId] || {}),
+    reminderSent: true,
+    reminderSentAt: new Date().toISOString()
+  };
+  await writeJson(handoffWindowsPath, handoffWindows);
+}
+
+export async function wasEmmaReplySent(customerId) {
+  const emmaReplies = await readJson(emmaRepliesPath, {});
+  return Boolean(emmaReplies[customerId]);
+}
+
+export async function markEmmaReplySent(customerId, reason = "existing_customer") {
+  const emmaReplies = await readJson(emmaRepliesPath, {});
+  emmaReplies[customerId] = {
+    reason,
+    sentAt: new Date().toISOString()
+  };
+  await writeJson(emmaRepliesPath, emmaReplies);
 }

@@ -57,10 +57,9 @@ const latinAmericaCountries = new Set([
 export const existingCustomerReply = [
   "Thank you. Our sales team will contact you soon.",
   "",
-  "If no one contacts you, please contact Emma (LIPACK):",
-  "",
-  "Cell: 86-18014856231",
-  "WhatsApp / WeChat",
+  "If no one contacts you, please contact ",
+  "Emma (LIPACK):",
+  "Cell: 86-18014856231 (WhatsApp / WeChat)",
   "Email: emma@cnlipack.com"
 ].join("\n");
 
@@ -85,6 +84,11 @@ export function normalizeProductAnswer(text) {
 
 export function isOfficialCodeMessage(text) {
   return officialCodePattern.test(String(text || ""));
+}
+
+export function isHumanHandoffRequest(text) {
+  return /\b(human|real person|real human|sales|salesperson|agent|staff|representative|contact me|call me|whatsapp me)\b/i.test(String(text || "")) ||
+    /人工|真人|业务员|销售|客服联系|人工客服|转人工|联系我|给我打电话/.test(String(text || ""));
 }
 
 export function parseQuantity(value) {

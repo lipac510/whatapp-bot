@@ -11,25 +11,31 @@ const companyAddress =
 const moqReply = "Our MOQ is 500 pcs.";
 const customReply =
   "Yes, we support custom packaging. Please send your product type, quantity, shipping address, and any photos/videos/links if you have them.";
-const handoffLine =
-  "Our sales specialist will review your request and contact you within the same business day. Working hours: Monday-Friday, 9:00-18:00, China time.";
+const productQuestion = [
+  "What type of packaging are you looking for?",
+  "1. Corrugated Box (ref. $0.5~1.5/pc)",
+  "2. Luxury Rigid Box (ref. $1.5~3/pc)",
+  "3. Paper Bag (ref. $0.1~0.6/pc)",
+  "4. Other-pls let me know.",
+  "✌️Just reply with a number"
+].join("\n");
+const openingPrompt = [
+  "Hello! Welcome! 😊 I'm Ans, your assistant from Lipack. I can help you quickly get packaging solution and quotes.",
+  "",
+  "For catalog 👉 www.cnlipack.com",
+  "",
+  "Here just need 30 seconds to collect this info: product / quantity / shipping location. ",
+  "",
+  productQuestion
+].join("\n");
+export const handoffReminderMessage = [
+  "Our sales specialist will review your request and contact you within the same business day.",
+  "",
+  " 👉 Working hours:Monday-Friday, 9:00-18:00,China time."
+].join("\n");
 
 const prompts = {
-  product: [
-    "Thanks for reaching out to Lipack.",
-    "",
-    "We are a 20-year paper box & paper bag factory, exporting to 150+ countries and serving 5,000+ brands.",
-    "FSC & SGS certified. Supplier to Disney for 15+ years.",
-    `MOQ: 500 pcs. ${websiteReply}`,
-    "",
-    "What type of packaging are you looking for?",
-    "1. Corrugated Box, rough range: $0.5-$1.5/pc",
-    "2. Luxury Rigid Box, rough range: $1.5-$3/pc",
-    "3. Paper Bag, rough range: $0.1-$0.6/pc",
-    "4. Other",
-    "",
-    "Please reply with a number, or send product photos/videos/links."
-  ].join("\n"),
+  product: productQuestion,
   quantity: "Great. What quantity do you need?\nYou can reply like: 1000 pcs.",
   address: "Which country should we ship to?\nIf possible, please share the full delivery address so we can estimate shipping more accurately."
 };
@@ -110,17 +116,17 @@ function buildSummary(data) {
   const videoCount = data.videoLinks?.length || 0;
   const linkCount = data.customerLinks?.length || 0;
   return [
-    "Thank you. We have received your inquiry.",
+    "😊 Thank you. We have received your inquiry.",
     "",
     "Inquiry details:",
     `Product: ${data.product}`,
     `Quantity: ${data.quantity}`,
-    `Shipping address: ${data.address}`,
+    `Shipping address:${data.address || ""}`,
     imageCount ? `Photos received: ${imageCount}` : "",
     videoCount ? `Videos received: ${videoCount}` : "",
     linkCount ? `Links received: ${linkCount}` : "",
     "",
-    handoffLine
+    handoffReminderMessage
   ].filter((line) => line !== "").join("\n");
 }
 
@@ -136,7 +142,7 @@ export function startConversation(profileName = "") {
       },
       startedAt: new Date().toISOString()
     },
-    replies: [prompts.product],
+    replies: [openingPrompt],
     complete: false
   };
 }
