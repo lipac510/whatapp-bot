@@ -28,6 +28,7 @@ test("collects product, quantity, and address", () => {
   });
   assert.match(result.replies[0], /Inquiry details:/);
   assert.match(result.replies[0], /Product: Corrugated Box/);
+  assert.match(result.replies[0], /within the same business day/);
 });
 
 test("answers bot questions without advancing", () => {
@@ -38,6 +39,28 @@ test("answers bot questions without advancing", () => {
   assert.equal(result.complete, false);
   assert.match(result.replies[0], /automated assistant/);
   assert.match(result.replies[0], /What type of packaging/);
+});
+
+test("answers catalog questions and keeps collecting product", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "catalog please", "Alice");
+
+  assert.equal(result.session.step, "product");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /www\.cnlipack\.com/);
+  assert.match(result.replies[0], /What type of packaging/);
+});
+
+test("answers location and MOQ questions without advancing", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "where are you?", "Alice");
+
+  assert.equal(result.session.step, "product");
+  assert.match(result.replies[0], /Changjian Road/);
+
+  result = handleCustomerMessage(result.session, "can I order sample?", "Alice");
+  assert.equal(result.session.step, "product");
+  assert.match(result.replies[0], /MOQ is 500 pcs/);
 });
 
 test("rejects empty answers without advancing", () => {
