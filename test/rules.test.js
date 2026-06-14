@@ -33,6 +33,10 @@ test("detects official code messages", () => {
   assert.equal(isOfficialCodeMessage("123456 是你的Instagram 验证码"), true);
   assert.equal(isOfficialCodeMessage("123456 is your Instagram code, don't share it."), true);
   assert.equal(isOfficialCodeMessage("123456 is your Facebook confirmation code."), true);
+  assert.equal(
+    isOfficialCodeMessage("https://www.instagram.com/reel/DYVHt8Lgdn8/?igsh=MXVvem5xdmh3dWI0bA=="),
+    false
+  );
 });
 
 test("detects restricted countries", () => {

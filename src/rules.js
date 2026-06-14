@@ -11,7 +11,7 @@ const urlOnlyPattern = /^https?:\/\/\S+$/i;
 const numberOnlyPattern = /^\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?$/i;
 
 const officialCodePattern =
-  /(\d{4,8}\s*(是你的|is your).{0,40}(facebook|instagram).{0,40}(验证码|code|confirmation code)|verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|验证码|校验码|动态码|one-time password|otp|meta|facebook|instagram|whatsapp|okki)/i;
+  /(\b\d{4,8}\b.{0,80}(是你的|is your|verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp)|(verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp).{0,80}\b\d{4,8}\b)/i;
 
 const restrictedCountries = new Set([
   "IN",
@@ -83,7 +83,9 @@ export function normalizeProductAnswer(text) {
 }
 
 export function isOfficialCodeMessage(text) {
-  return officialCodePattern.test(String(text || ""));
+  const value = String(text || "");
+  if (!/\b\d{4,8}\b/.test(value)) return false;
+  return officialCodePattern.test(value);
 }
 
 export function isHumanHandoffRequest(text) {
