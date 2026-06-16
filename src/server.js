@@ -7,9 +7,14 @@ import {
   getSession,
   isKnownCustomer,
   isMessageProcessed,
+  listEmmaReplies,
   listFailures,
+  listHandoffWindows,
   listInquiries,
+  listKnownCustomers,
+  listMessageEvents,
   listOkkiSyncs,
+  listSessions,
   markEmmaReplySent,
   markHandoffReminderSent,
   markHandoffWindow,
@@ -17,10 +22,12 @@ import {
   markMessageProcessed,
   saveFailure,
   saveInquiry,
+  saveMessageEvent,
   saveOkkiSync,
   saveSession,
   wasEmmaReplySent
 } from "./storage.js";
+import { buildAdminModel, renderAdminPage } from "./admin.js";
 import {
   formatInquiryForLog,
   handleCustomerImage,
@@ -43,6 +50,47 @@ import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json" });
   response.end(JSON.stringify(payload, null, 2));
+}
+
+function sendHtml(response, statusCode, html) {
+  response.writeHead(statusCode, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(html);
+}
+
+function sendPlain(response, statusCode, text, headers = {}) {
+  response.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8", ...headers });
+  response.end(text);
+}
+
+function isAdminAuthorized(request) {
+  if (!config.adminPassword) return false;
+
+  const auth = request.headers.authorization || "";
+  if (!auth.startsWith("Basic ")) return false;
+
+  try {
+    const decoded = Buffer.from(auth.slice("Basic ".length), "base64").toString("utf8");
+    const password = decoded.slice(decoded.indexOf(":") + 1);
+    return password === config.adminPassword;
+  } catch {
+    return false;
+  }
+}
+
+function requireAdmin(request, response) {
+  if (!config.adminPassword) {
+    sendPlain(response, 403, "Admin dashboard is disabled. Set ADMIN_PASSWORD in Render Environment first.");
+    return false;
+  }
+
+  if (!isAdminAuthorized(request)) {
+    sendPlain(response, 401, "Authentication required", {
+      "WWW-Authenticate": 'Basic realm="WhatsApp Bot Admin"'
+    });
+    return false;
+  }
+
+  return true;
 }
 
 function getPublicBaseUrl(request) {
@@ -90,8 +138,9 @@ function isWithinHours(isoDate, hours) {
 
 async function sendEmmaReplyOnce(customerId, reason) {
   if (await wasEmmaReplySent(customerId)) return false;
-  await sendTextMessage(customerId, existingCustomerReply);
+  await sendAndLogText(customerId, existingCustomerReply, { category: reason });
   await markEmmaReplySent(customerId, reason);
+  await saveSystemEvent(customerId, "Emma contact sent", reason);
   return true;
 }
 
@@ -100,11 +149,48 @@ async function handleRecentHandoffWindow(customerId) {
   if (!handoff || !isWithinHours(handoff.completedAt, 6)) return false;
 
   if (!handoff.reminderSent) {
-    await sendTextMessage(customerId, handoffReminderMessage);
+    await sendAndLogText(customerId, handoffReminderMessage, { category: "handoff_reminder" });
     await markHandoffReminderSent(customerId);
+    await saveSystemEvent(customerId, "Handoff reminder sent", "handoff_reminder");
   }
 
   return true;
+}
+
+async function sendAndLogText(customerId, text, extra = {}) {
+  await sendTextMessage(customerId, text);
+  await saveMessageEvent({
+    customerId,
+    direction: "out",
+    type: "text",
+    text,
+    ...extra
+  });
+}
+
+async function saveSystemEvent(customerId, label, category, extra = {}) {
+  await saveMessageEvent({
+    customerId,
+    direction: "system",
+    type: "event",
+    label,
+    category,
+    ...extra
+  });
+}
+
+async function saveInboundMessageEvent(message, request) {
+  await saveMessageEvent({
+    messageId: message.id,
+    customerId: message.from,
+    profileName: message.profileName,
+    direction: "in",
+    type: message.type,
+    text: message.text || "",
+    mediaId: message.mediaId || "",
+    mediaUrl: message.mediaId ? buildMediaUrl(request, message.mediaId) : "",
+    category: "customer_message"
+  });
 }
 
 async function readRequestBody(request) {
@@ -161,6 +247,8 @@ async function handleWebhookPost(request, response) {
         continue;
       }
 
+      await saveInboundMessageEvent(message, request);
+
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
         const noticeTime = new Date().toISOString().replace(/[:.]/g, "-");
         const officialNotice = {
@@ -181,6 +269,9 @@ async function handleWebhookPost(request, response) {
           ].join("\n")
         };
         await saveInquiry(officialNotice);
+        await saveSystemEvent(message.from, "Official notice saved", "official_notice", {
+          messageId: message.id
+        });
         try {
           const okki = await createOkkiCustomerFromInquiry(officialNotice);
           if (okki.enabled) {
@@ -192,6 +283,9 @@ async function handleWebhookPost(request, response) {
               officialNotice: true,
               result: okki.result
             });
+            await saveSystemEvent(message.from, "Official notice synced to OKKI", "okki_synced", {
+              messageId: message.id
+            });
           }
         } catch (okkiError) {
           await saveFailure({
@@ -199,6 +293,10 @@ async function handleWebhookPost(request, response) {
             customerId: message.from,
             text: message.text,
             error: `OKKI official notice sync failed: ${okkiError.message}`
+          });
+          await saveSystemEvent(message.from, "OKKI official notice sync failed", "okki_failed", {
+            messageId: message.id,
+            error: okkiError.message
           });
         }
         await markMessageProcessed(message.id);
@@ -235,17 +333,28 @@ async function handleWebhookPost(request, response) {
           ...result.inquiry
         };
         await saveInquiry(inquiry);
+        await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
+          messageId: message.id,
+          product: inquiry.product,
+          quantity: inquiry.quantity,
+          address: inquiry.address
+        });
         await clearSession(message.from);
         console.log(`New inquiry from ${message.from}\n${formatInquiryForLog(result.inquiry)}`);
 
         const rejection = shouldRejectInquiry(inquiry);
         if (rejection.rejected) {
-          await sendTextMessage(message.from, noShippingAgentReply);
+          await sendAndLogText(message.from, noShippingAgentReply, { category: "restricted_country" });
           await saveFailure({
             messageId: message.id,
             customerId: message.from,
             text: message.text || message.type,
             error: `Restricted country skipped: ${rejection.country}, quantity ${rejection.quantity}`
+          });
+          await saveSystemEvent(message.from, "Restricted country skipped", "restricted_country", {
+            messageId: message.id,
+            country: rejection.country,
+            quantity: rejection.quantity
           });
           continue;
         }
@@ -262,6 +371,9 @@ async function handleWebhookPost(request, response) {
               ok: true,
               result: okki.result
             });
+            await saveSystemEvent(message.from, "OKKI customer synced", "okki_synced", {
+              messageId: message.id
+            });
           } else {
             console.log("OKKI sync skipped because OKKI_CLIENT_ID/OKKI_CLIENT_SECRET are not configured");
             await saveOkkiSync({
@@ -270,10 +382,13 @@ async function handleWebhookPost(request, response) {
               ok: false,
               skipped: true
             });
+            await saveSystemEvent(message.from, "OKKI sync skipped", "okki_skipped", {
+              messageId: message.id
+            });
           }
 
           for (const reply of result.replies) {
-            await sendTextMessage(message.from, reply);
+            await sendAndLogText(message.from, reply, { category: "conversation_reply" });
           }
         } catch (okkiError) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
@@ -282,7 +397,7 @@ async function handleWebhookPost(request, response) {
             await sendEmmaReplyOnce(message.from, "okki_existing");
           } else {
             for (const reply of result.replies) {
-              await sendTextMessage(message.from, reply);
+              await sendAndLogText(message.from, reply, { category: "conversation_reply" });
             }
           }
           await saveFailure({
@@ -291,10 +406,14 @@ async function handleWebhookPost(request, response) {
             text: message.text || message.type,
             error: `OKKI sync failed: ${okkiError.message}`
           });
+          await saveSystemEvent(message.from, "OKKI sync failed", "okki_failed", {
+            messageId: message.id,
+            error: okkiError.message
+          });
         }
       } else {
         for (const reply of result.replies) {
-          await sendTextMessage(message.from, reply);
+          await sendAndLogText(message.from, reply, { category: "conversation_reply" });
         }
       }
     } catch (error) {
@@ -303,6 +422,10 @@ async function handleWebhookPost(request, response) {
         messageId: message.id,
         customerId: message.from,
         text: message.text || message.type,
+        error: error.message
+      });
+      await saveSystemEvent(message.from, "Message processing failed", "processing_failed", {
+        messageId: message.id,
         error: error.message
       });
     }
@@ -362,6 +485,45 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/okki-diagnostics") {
       sendJson(response, 200, await getOkkiDiagnostics());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/conversations") {
+      if (!requireAdmin(request, response)) return;
+      const payload = {
+        messages: await listMessageEvents(),
+        inquiries: await listInquiries(),
+        failures: await listFailures(),
+        okkiSyncs: await listOkkiSyncs(),
+        sessions: await listSessions(),
+        knownCustomers: await listKnownCustomers(),
+        handoffWindows: await listHandoffWindows(),
+        emmaReplies: await listEmmaReplies()
+      };
+      const model = buildAdminModel({
+        ...payload,
+        query: url.searchParams.get("q") || ""
+      });
+      sendJson(response, 200, { ...payload, conversations: model.conversations, totals: model.totals });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/admin") {
+      if (!requireAdmin(request, response)) return;
+      const query = url.searchParams.get("q") || "";
+      const selectedCustomerId = url.searchParams.get("customer") || "";
+      const payload = {
+        messages: await listMessageEvents(),
+        inquiries: await listInquiries(),
+        failures: await listFailures(),
+        okkiSyncs: await listOkkiSyncs(),
+        sessions: await listSessions(),
+        knownCustomers: await listKnownCustomers(),
+        handoffWindows: await listHandoffWindows(),
+        emmaReplies: await listEmmaReplies()
+      };
+      const model = buildAdminModel({ ...payload, query });
+      sendHtml(response, 200, renderAdminPage({ ...payload, model, selectedCustomerId, query }));
       return;
     }
 

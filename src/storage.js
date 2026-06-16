@@ -7,6 +7,7 @@ const inquiriesPath = path.join(config.dataDir, "inquiries.json");
 const processedMessagesPath = path.join(config.dataDir, "processed-messages.json");
 const failuresPath = path.join(config.dataDir, "failures.json");
 const okkiSyncsPath = path.join(config.dataDir, "okki-syncs.json");
+const messageEventsPath = path.join(config.dataDir, "message-events.json");
 const knownCustomersPath = path.join(config.dataDir, "known-customers.json");
 const handoffWindowsPath = path.join(config.dataDir, "handoff-windows.json");
 const emmaRepliesPath = path.join(config.dataDir, "emma-replies.json");
@@ -34,6 +35,10 @@ export async function getSession(customerId) {
   await ensureDataDir();
   const sessions = await readJson(sessionsPath, {});
   return sessions[customerId] || null;
+}
+
+export async function listSessions() {
+  return readJson(sessionsPath, {});
 }
 
 export async function saveSession(customerId, session) {
@@ -104,9 +109,27 @@ export async function listOkkiSyncs() {
   return readJson(okkiSyncsPath, []);
 }
 
+export async function saveMessageEvent(event) {
+  const events = await readJson(messageEventsPath, []);
+  events.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ...event,
+    createdAt: new Date().toISOString()
+  });
+  await writeJson(messageEventsPath, events.slice(-2000));
+}
+
+export async function listMessageEvents() {
+  return readJson(messageEventsPath, []);
+}
+
 export async function isKnownCustomer(customerId) {
   const knownCustomers = await readJson(knownCustomersPath, {});
   return Boolean(knownCustomers[customerId]);
+}
+
+export async function listKnownCustomers() {
+  return readJson(knownCustomersPath, {});
 }
 
 export async function markKnownCustomer(customerId, reason = "okki") {
@@ -121,6 +144,10 @@ export async function markKnownCustomer(customerId, reason = "okki") {
 export async function getHandoffWindow(customerId) {
   const handoffWindows = await readJson(handoffWindowsPath, {});
   return handoffWindows[customerId] || null;
+}
+
+export async function listHandoffWindows() {
+  return readJson(handoffWindowsPath, {});
 }
 
 export async function markHandoffWindow(customerId) {
@@ -145,6 +172,10 @@ export async function markHandoffReminderSent(customerId) {
 export async function wasEmmaReplySent(customerId) {
   const emmaReplies = await readJson(emmaRepliesPath, {});
   return Boolean(emmaReplies[customerId]);
+}
+
+export async function listEmmaReplies() {
+  return readJson(emmaRepliesPath, {});
 }
 
 export async function markEmmaReplySent(customerId, reason = "existing_customer") {

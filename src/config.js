@@ -36,6 +36,7 @@ export const config = {
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "",
   appSecret: process.env.META_APP_SECRET || "",
   businessName: process.env.BUSINESS_NAME || "Lipack Packaging",
+  adminPassword: process.env.ADMIN_PASSWORD || "",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
   dataDir: process.env.DATA_DIR || (process.env.RENDER ? "/tmp/wa-bot-data" : "data"),
   okkiApiBase: process.env.OKKI_API_BASE || "https://api-sandbox.xiaoman.cn",

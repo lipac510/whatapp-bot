@@ -12,6 +12,8 @@ services:
         value: v25.0
       - key: BUSINESS_NAME
         value: Lipack Packaging
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: TIMEZONE
         value: America/Los_Angeles
       - key: PUBLIC_BASE_URL

@@ -70,6 +70,30 @@ GET /inquiries
 GET /failures
 ```
 
+## 内部后台
+
+部署后可以通过下面地址查看客户列表、聊天记录、OKKI 同步记录和失败原因：
+
+```text
+GET /admin
+```
+
+后台默认关闭。需要先在 Render 的 Environment 里增加：
+
+```env
+ADMIN_PASSWORD=你自己设置的后台密码
+```
+
+访问 `/admin` 时浏览器会弹出登录框：用户名可以随便填，密码填写 `ADMIN_PASSWORD`。
+
+也可以用 JSON 方式查看完整会话数据：
+
+```text
+GET /conversations
+```
+
+注意：当前免费 Render 服务的数据默认写在临时目录，适合快速排查；如果要长期保存所有聊天记录，建议后续接 Supabase、数据库或 Google Sheet。
+
 ## Meta Webhook 设置
 
 本地服务不能直接被 Meta 访问。后续需要部署到服务器，得到一个 HTTPS 地址。
