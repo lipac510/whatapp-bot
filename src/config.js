@@ -39,6 +39,8 @@ export const config = {
   adminPassword: process.env.ADMIN_PASSWORD || "",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
   dataDir: process.env.DATA_DIR || (process.env.RENDER ? "/tmp/wa-bot-data" : "data"),
+  supabaseUrl: process.env.SUPABASE_URL || "",
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   okkiApiBase: process.env.OKKI_API_BASE || "https://api-sandbox.xiaoman.cn",
   okkiClientId: process.env.OKKI_CLIENT_ID || "",
   okkiClientSecret: process.env.OKKI_CLIENT_SECRET || "",
@@ -60,6 +62,15 @@ export function hasOkkiConfig() {
       !config.okkiClientId.includes("replace_with") &&
       config.okkiClientSecret &&
       !config.okkiClientSecret.includes("replace_with")
+  );
+}
+
+export function hasSupabaseConfig() {
+  return Boolean(
+    config.supabaseUrl &&
+      config.supabaseUrl.startsWith("http") &&
+      config.supabaseServiceRoleKey &&
+      !config.supabaseServiceRoleKey.includes("replace_with")
   );
 }
 

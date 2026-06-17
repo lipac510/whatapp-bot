@@ -94,6 +94,22 @@ GET /conversations
 
 注意：当前免费 Render 服务的数据默认写在临时目录，适合快速排查；如果要长期保存所有聊天记录，建议后续接 Supabase、数据库或 Google Sheet。
 
+## Supabase 持久化
+
+如果已经配置下面两个环境变量，机器人会优先把后台数据写入 Supabase，不再依赖 Render 的临时目录：
+
+```env
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+未配置时，项目会自动回退到本地 JSON 文件模式。
+
+建表 SQL 和接入步骤见：
+
+- [Supabase 接入说明](</Users/lipack/Documents/WA bot/docs/stage5-supabase.md:1>)
+- [Supabase 建表 SQL](</Users/lipack/Documents/WA bot/docs/supabase-schema.sql:1>)
+
 ## Meta Webhook 设置
 
 本地服务不能直接被 Meta 访问。后续需要部署到服务器，得到一个 HTTPS 地址。

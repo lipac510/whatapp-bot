@@ -18,6 +18,10 @@ services:
         value: America/Los_Angeles
       - key: PUBLIC_BASE_URL
         value: https://wa-customer-info-bot.onrender.com
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: WHATSAPP_ACCESS_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
