@@ -11,8 +11,9 @@ test("collects product, quantity, and address", () => {
   let result = startConversation("Alice");
   assert.equal(result.session.step, "product");
   assert.equal(result.complete, false);
-  assert.match(result.replies[0], /Hello! Welcome! 😊 I'm Ans/);
-  assert.match(result.replies[0], /For catalog 👉 www\.cnlipack\.com/);
+  assert.match(result.replies[0], /Hi there! 👋 I'm Ans, the AI assistant at Lipack\./);
+  assert.match(result.replies[0], /📖 catalog 👉 www\.cnlipack\.com/);
+  assert.match(result.replies[0], /✅ Product/);
 
   result = handleCustomerMessage(result.session, "1", "Alice");
   assert.equal(result.session.step, "quantity");
@@ -42,7 +43,7 @@ test("answers bot questions without advancing", () => {
   assert.equal(result.session.step, "product");
   assert.equal(result.complete, false);
   assert.match(result.replies[0], /automated assistant/);
-  assert.match(result.replies[0], /What type of packaging/);
+  assert.match(result.replies[0], /what kind of packaging do you need/);
 });
 
 test("answers catalog questions and keeps collecting product", () => {
@@ -52,8 +53,8 @@ test("answers catalog questions and keeps collecting product", () => {
   assert.equal(result.session.step, "product");
   assert.equal(result.complete, false);
   assert.match(result.replies[0], /www\.cnlipack\.com/);
-  assert.match(result.replies[0], /What type of packaging/);
-  assert.doesNotMatch(result.replies[0], /Hello! Welcome/);
+  assert.match(result.replies[0], /what kind of packaging do you need/);
+  assert.doesNotMatch(result.replies[0], /Hi there!/);
 });
 
 test("answers location and MOQ questions without advancing", () => {

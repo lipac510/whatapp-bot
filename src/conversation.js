@@ -12,19 +12,22 @@ const moqReply = "Our MOQ is 500 pcs.";
 const customReply =
   "Yes, we support custom packaging. Please send your product type, quantity, shipping address, and any photos/videos/links if you have them.";
 const productQuestion = [
-  "What type of packaging are you looking for?",
-  "1. Corrugated Box (ref. $0.5~1.5/pc)",
-  "2. Luxury Rigid Box (ref. $1.5~3/pc)",
-  "3. Paper Bag (ref. $0.1~0.6/pc)",
-  "4. Other-pls let me know.",
-  "✌️Just reply with a number"
+  "#1 — what kind of packaging do you need?",
+  "",
+  "1️⃣ Corrugated Box (ref. $0.5–1.5/pc)",
+  "2️⃣ Luxury Rigid Box (ref. $1.5–3/pc)",
+  "3️⃣ Paper Bag (ref. $0.1–0.6/pc)",
+  "4️⃣ Other — just tell me what you need",
+  "",
+  "👉 Just reply with a number to begin!"
 ].join("\n");
 const openingPrompt = [
-  "Hello! Welcome! 😊 I'm Ans, your assistant from Lipack. I can help you quickly get packaging solution and quotes.",
+  "Hi there! 👋 I'm Ans, the AI assistant at Lipack. Just share 3 quick things below (~30 sec), then a real specialist will follow up to help you 😊",
+  "✅ Product  ",
+  "✅ Quantity",
+  "✅ Shipping destination",
   "",
-  "For catalog 👉 www.cnlipack.com",
-  "",
-  "Here just need 30 seconds to collect this info: product / quantity / shipping location. ",
+  "📖 catalog 👉 www.cnlipack.com",
   "",
   productQuestion
 ].join("\n");
