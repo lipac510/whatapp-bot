@@ -2,6 +2,7 @@ import { config, hasOkkiConfig } from "./config.js";
 import { inferCountry, splitPhone } from "./country.js";
 
 let tokenCache = null;
+const okkiSummaryLimit = 255;
 
 function cleanObject(value) {
   return Object.fromEntries(
@@ -23,6 +24,52 @@ function setConfiguredField(target, fieldId, value) {
   const key = String(fieldId || "").trim();
   if (!key || value === "" || value === null || value === undefined) return;
   target[key] = value;
+}
+
+function joinSummaryParts(parts) {
+  return parts.filter(Boolean).join(" | ");
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+function buildDetailedInquirySummary(inquiry) {
+  return (
+    inquiry.summaryOverride ||
+    [
+      `询盘产品：${inquiry.product || ""}`,
+      `采购数量：${inquiry.quantity || ""}`,
+      `发货地址：${inquiry.address || "not provided yet"}`,
+      inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
+      inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
+      inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
+    ]
+      .filter(Boolean)
+      .join("\n")
+  );
+}
+
+function buildCompactInquirySummary(inquiry) {
+  if (inquiry.summaryOverride) {
+    const summaryOverride = String(inquiry.summaryOverride);
+    if (summaryOverride.length <= okkiSummaryLimit) return summaryOverride;
+    return `${summaryOverride.slice(0, Math.max(0, okkiSummaryLimit - 3)).trimEnd()}...`;
+  }
+
+  const summary = joinSummaryParts([
+    inquiry.product || "",
+    inquiry.quantity || "",
+    inquiry.address ? truncateText(inquiry.address, 80) : "",
+    inquiry.imageLinks?.length ? `Photos:${inquiry.imageLinks.length}` : "",
+    inquiry.videoLinks?.length ? `Videos:${inquiry.videoLinks.length}` : "",
+    inquiry.customerLinks?.length ? `Links:${inquiry.customerLinks.length}` : "",
+    inquiry.message ? truncateText(inquiry.message, 80) : ""
+  ]);
+
+  return truncateText(summary, okkiSummaryLimit);
 }
 
 async function getOkkiAccessToken() {
@@ -68,18 +115,8 @@ export function buildOkkiCompanyPayload(inquiry) {
   const originList = parseOriginList();
   const userId = Number(config.okkiOwnerUserId || 0);
 
-  const inquirySummary =
-    inquiry.summaryOverride ||
-    [
-      `询盘产品：${inquiry.product || ""}`,
-      `采购数量：${inquiry.quantity || ""}`,
-      `发货地址：${inquiry.address || "not provided yet"}`,
-      inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : "",
-      inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
-      inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : ""
-    ]
-      .filter(Boolean)
-      .join("\n");
+  const inquirySummary = buildDetailedInquirySummary(inquiry);
+  const compactInquirySummary = buildCompactInquirySummary(inquiry);
 
   const payload = cleanObject({
     company_id: 0,
@@ -92,7 +129,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
     tel: isOfficialNotice ? undefined : phone.localNumber,
     origin_list: originList,
-    remark: inquirySummary,
+    remark: compactInquirySummary || inquirySummary,
     customers: [
       cleanObject({
         customer_id: 0,
@@ -102,7 +139,7 @@ export function buildOkkiCompanyPayload(inquiry) {
         tel: isOfficialNotice ? undefined : phone.localNumber,
         whatsapp: isOfficialNotice ? undefined : phone.fullNumber,
         main_customer_flag: 1,
-        remark: inquirySummary
+        remark: compactInquirySummary || inquirySummary
       })
     ]
   });
@@ -111,7 +148,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     setConfiguredField(payload, config.okkiInquiryProductFieldId, inquiry.product || "");
     setConfiguredField(payload, config.okkiPurchaseQuantityFieldId, inquiry.quantity || "");
   }
-  setConfiguredField(payload, config.okkiInquirySummaryFieldId, inquirySummary);
+  setConfiguredField(payload, config.okkiInquirySummaryFieldId, compactInquirySummary || inquirySummary);
 
   return payload;
 }

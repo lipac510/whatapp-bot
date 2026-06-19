@@ -27,11 +27,11 @@ test("builds OKKI customer payload from inquiry", () => {
   assert.equal(payload.customers[0].tel, "18014856231");
   assert.equal(payload.customers[0].whatsapp, "8618014856231");
   assert.equal(payload.customers[0].main_customer_flag, 1);
-  assert.match(payload.remark, /询盘产品：Paper cup/);
-  assert.match(payload.remark, /采购数量：5000/);
-  assert.match(payload.remark, /客户链接：https:\/\/example.com\/product/);
-  assert.match(payload.remark, /图片链接：https:\/\/example.com\/media\/image/);
-  assert.match(payload.remark, /视频链接：https:\/\/example.com\/media\/video/);
+  assert.match(payload.remark, /Paper cup/);
+  assert.match(payload.remark, /5000/);
+  assert.match(payload.remark, /Links:1/);
+  assert.match(payload.remark, /Photos:1/);
+  assert.match(payload.remark, /Videos:1/);
 });
 
 test("uses WhatsApp number as fallback contact name", () => {
@@ -56,9 +56,12 @@ test("keeps email and WhatsApp out of inquiry summary remark", () => {
     email: "buyer@example.com"
   });
 
-  assert.match(payload.remark, /询盘产品：Paper cup/);
-  assert.match(payload.remark, /采购数量：5000/);
-  assert.match(payload.remark, /发货地址：Dubai, UAE/);
+  assert.match(payload.remark, /Paper cup/);
+  assert.match(payload.remark, /5000/);
+  assert.match(payload.remark, /Dubai, UAE/);
+  assert.doesNotMatch(payload.remark, /Product:/);
+  assert.doesNotMatch(payload.remark, /Qty:/);
+  assert.doesNotMatch(payload.remark, /Ship:/);
   assert.doesNotMatch(payload.remark, /buyer@example.com/);
   assert.doesNotMatch(payload.remark, /8618014856231/);
 });
@@ -79,4 +82,30 @@ test("builds OKKI payload for official notices without duplicate phone fields", 
   assert.equal(payload.tel, undefined);
   assert.equal(payload.customers[0].tel, undefined);
   assert.equal(payload.customers[0].whatsapp, undefined);
+});
+
+test("limits OKKI inquiry summary field to 255 characters", () => {
+  const payload = buildOkkiCompanyPayload({
+    customerId: "22231619826",
+    profileName: "M",
+    product: "Corrugated Box",
+    quantity: "120000",
+    address: "Mauritania nouakchott africa west coast industrial zone warehouse building 9 section A",
+    customerLinks: [
+      "https://example.com/very/long/link/1",
+      "https://example.com/very/long/link/2"
+    ],
+    imageLinks: [
+      "https://wa-customer-info-bot.onrender.com/media/1330875441809267",
+      "https://wa-customer-info-bot.onrender.com/media/1330875441809268"
+    ],
+    videoLinks: ["https://wa-customer-info-bot.onrender.com/media/1550000000000001"]
+  });
+
+  assert.ok(payload.remark.length <= 255);
+  assert.match(payload.remark, /Corrugated Box/);
+  assert.match(payload.remark, /120000/);
+  assert.match(payload.remark, /Photos:2/);
+  assert.match(payload.remark, /Videos:1/);
+  assert.doesNotMatch(payload.remark, /Product:/);
 });

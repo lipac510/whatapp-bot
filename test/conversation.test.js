@@ -114,6 +114,7 @@ test("collects image links without advancing the conversation", () => {
 
   assert.equal(result.session.step, "product");
   assert.deepEqual(result.session.data.imageLinks, ["https://example.com/media/abc"]);
+  assert.deepEqual(result.replies, []);
 
   result = handleCustomerMessage(result.session, "Paper bag", "Alice");
   result = handleCustomerMessage(result.session, "5000 pcs", "Alice");
@@ -131,6 +132,7 @@ test("collects customer links and video links", () => {
     "Alice"
   );
   result = handleCustomerVideo(result.session, "https://example.com/media/video", "Alice");
+  assert.deepEqual(result.replies, []);
   result = handleCustomerMessage(result.session, "5000 pcs", "Alice");
 
   assert.equal(result.complete, true);
@@ -138,4 +140,18 @@ test("collects customer links and video links", () => {
   assert.deepEqual(result.inquiry.videoLinks, ["https://example.com/media/video"]);
   assert.match(result.replies[0], /Videos received: 1/);
   assert.match(result.replies[0], /Links received: 1/);
+});
+
+test("does not reply to attachments after inquiry is already complete", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "1", "Alice");
+  result = handleCustomerMessage(result.session, "5000", "Alice");
+
+  const attachmentResult = handleCustomerImage(
+    result.session,
+    "https://example.com/media/extra",
+    "Alice"
+  );
+
+  assert.deepEqual(attachmentResult.replies, []);
 });

@@ -292,7 +292,6 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
 export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "") {
   const activeSession = session || startConversation(profileName).session;
   const key = attachmentType === "video" ? "videoLinks" : "imageLinks";
-  const label = attachmentType === "video" ? "video" : "photo";
   const updated = {
     ...activeSession,
     profileName: activeSession.profileName || profileName,
@@ -305,14 +304,14 @@ export function handleCustomerAttachment(session, attachmentType, attachmentLink
   if (updated.step === "complete") {
     return {
       session: updated,
-      replies: [`Your ${label} has been received. If this is a new inquiry, please reply "restart" first.`],
+      replies: [],
       complete: false
     };
   }
 
   return {
     session: updated,
-    replies: [`Your ${label} has been received. You can continue sending attachments.\n\n${prompts[updated.step]}`],
+    replies: [],
     complete: false
   };
 }
