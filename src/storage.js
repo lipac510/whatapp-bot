@@ -18,13 +18,34 @@ const storageLimits = {
   messageEvents: 2000,
   processedMessages: 1000
 };
+let supabaseRuntimeDisabled = false;
 
 function randomId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function isSupabaseEnabled() {
-  return hasSupabaseConfig();
+  return hasSupabaseConfig() && !supabaseRuntimeDisabled;
+}
+
+function isRecoverableSupabaseError(error) {
+  const message = String(error?.message || "");
+  return /JWT issued at future|Invalid JWT|expired|network|fetch failed|ECONNRESET|ENOTFOUND|timed out|timeout/i.test(message);
+}
+
+async function withSupabaseFallback(label, localOperation, supabaseOperation) {
+  if (!isSupabaseEnabled()) {
+    return localOperation();
+  }
+
+  try {
+    return await supabaseOperation();
+  } catch (error) {
+    if (!isRecoverableSupabaseError(error)) throw error;
+    supabaseRuntimeDisabled = true;
+    console.warn(`${label}: ${error.message}. Falling back to local storage for this runtime.`);
+    return localOperation();
+  }
 }
 
 async function ensureDataDir() {
@@ -116,13 +137,22 @@ export async function getSession(customerId) {
     const sessions = await readJson(sessionsPath, {});
     return sessions[customerId] || null;
   }
-
-  const rows = await supabaseSelect("sessions", {
-    select: "customer_id,payload,updated_at",
-    customer_id: `eq.${customerId}`,
-    limit: "1"
-  });
-  return rows[0] ? rowToStoredPayload(rows[0]) : null;
+  return withSupabaseFallback(
+    "Supabase sessions GET failed",
+    async () => {
+      await ensureDataDir();
+      const sessions = await readJson(sessionsPath, {});
+      return sessions[customerId] || null;
+    },
+    async () => {
+      const rows = await supabaseSelect("sessions", {
+        select: "customer_id,payload,updated_at",
+        customer_id: `eq.${customerId}`,
+        limit: "1"
+      });
+      return rows[0] ? rowToStoredPayload(rows[0]) : null;
+    }
+  );
 }
 
 export async function listSessions() {
@@ -144,35 +174,41 @@ export async function saveSession(customerId, session) {
     updatedAt: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const sessions = await readJson(sessionsPath, {});
-    sessions[customerId] = next;
-    await writeJson(sessionsPath, sessions);
-    return;
-  }
-
-  await supabaseUpsert(
-    "sessions",
-    {
-      customer_id: customerId,
-      payload: next,
-      updated_at: next.updatedAt
+  return withSupabaseFallback(
+    "Supabase sessions UPSERT failed",
+    async () => {
+      const sessions = await readJson(sessionsPath, {});
+      sessions[customerId] = next;
+      await writeJson(sessionsPath, sessions);
     },
-    "customer_id"
+    async () => {
+      await supabaseUpsert(
+        "sessions",
+        {
+          customer_id: customerId,
+          payload: next,
+          updated_at: next.updatedAt
+        },
+        "customer_id"
+      );
+    }
   );
 }
 
 export async function clearSession(customerId) {
-  if (!isSupabaseEnabled()) {
-    const sessions = await readJson(sessionsPath, {});
-    delete sessions[customerId];
-    await writeJson(sessionsPath, sessions);
-    return;
-  }
-
-  await supabaseDelete("sessions", {
-    customer_id: `eq.${customerId}`
-  });
+  return withSupabaseFallback(
+    "Supabase sessions DELETE failed",
+    async () => {
+      const sessions = await readJson(sessionsPath, {});
+      delete sessions[customerId];
+      await writeJson(sessionsPath, sessions);
+    },
+    async () => {
+      await supabaseDelete("sessions", {
+        customer_id: `eq.${customerId}`
+      });
+    }
+  );
 }
 
 export async function saveInquiry(inquiry) {
@@ -182,20 +218,23 @@ export async function saveInquiry(inquiry) {
     createdAt: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const inquiries = await readJson(inquiriesPath, []);
-    inquiries.push(record);
-    await writeJson(inquiriesPath, inquiries);
-    return;
-  }
-
-  await supabaseInsert("inquiries", {
-    id: record.id,
-    customer_id: inquiry.customerId,
-    profile_name: inquiry.profileName || "",
-    payload: record,
-    created_at: record.createdAt
-  });
+  return withSupabaseFallback(
+    "Supabase inquiries INSERT failed",
+    async () => {
+      const inquiries = await readJson(inquiriesPath, []);
+      inquiries.push(record);
+      await writeJson(inquiriesPath, inquiries);
+    },
+    async () => {
+      await supabaseInsert("inquiries", {
+        id: record.id,
+        customer_id: inquiry.customerId,
+        profile_name: inquiry.profileName || "",
+        payload: record,
+        created_at: record.createdAt
+      });
+    }
+  );
 }
 
 export async function listInquiries() {
@@ -212,37 +251,43 @@ export async function listInquiries() {
 }
 
 export async function isMessageProcessed(messageId) {
-  if (!isSupabaseEnabled()) {
-    const processed = await readJson(processedMessagesPath, {});
-    return Boolean(processed[messageId]);
-  }
-
-  const rows = await supabaseSelect("processed_messages", {
-    select: "message_id",
-    message_id: `eq.${messageId}`,
-    limit: "1"
-  });
-  return rows.length > 0;
+  return withSupabaseFallback(
+    "Supabase processed_messages GET failed",
+    async () => {
+      const processed = await readJson(processedMessagesPath, {});
+      return Boolean(processed[messageId]);
+    },
+    async () => {
+      const rows = await supabaseSelect("processed_messages", {
+        select: "message_id",
+        message_id: `eq.${messageId}`,
+        limit: "1"
+      });
+      return rows.length > 0;
+    }
+  );
 }
 
 export async function markMessageProcessed(messageId) {
   const processedAt = new Date().toISOString();
-
-  if (!isSupabaseEnabled()) {
-    const processed = await readJson(processedMessagesPath, {});
-    processed[messageId] = processedAt;
-    const entries = Object.entries(processed).slice(-storageLimits.processedMessages);
-    await writeJson(processedMessagesPath, Object.fromEntries(entries));
-    return;
-  }
-
-  await supabaseUpsert(
-    "processed_messages",
-    {
-      message_id: messageId,
-      processed_at: processedAt
+  return withSupabaseFallback(
+    "Supabase processed_messages UPSERT failed",
+    async () => {
+      const processed = await readJson(processedMessagesPath, {});
+      processed[messageId] = processedAt;
+      const entries = Object.entries(processed).slice(-storageLimits.processedMessages);
+      await writeJson(processedMessagesPath, Object.fromEntries(entries));
     },
-    "message_id"
+    async () => {
+      await supabaseUpsert(
+        "processed_messages",
+        {
+          message_id: messageId,
+          processed_at: processedAt
+        },
+        "message_id"
+      );
+    }
   );
 }
 
@@ -253,20 +298,23 @@ export async function saveFailure(failure) {
     createdAt: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const failures = await readJson(failuresPath, []);
-    failures.push(record);
-    await writeJson(failuresPath, failures.slice(-storageLimits.failures));
-    return;
-  }
-
-  await supabaseInsert("failures", {
-    id: record.id,
-    customer_id: failure.customerId || "",
-    message_id: failure.messageId || "",
-    payload: record,
-    created_at: record.createdAt
-  });
+  return withSupabaseFallback(
+    "Supabase failures INSERT failed",
+    async () => {
+      const failures = await readJson(failuresPath, []);
+      failures.push(record);
+      await writeJson(failuresPath, failures.slice(-storageLimits.failures));
+    },
+    async () => {
+      await supabaseInsert("failures", {
+        id: record.id,
+        customer_id: failure.customerId || "",
+        message_id: failure.messageId || "",
+        payload: record,
+        created_at: record.createdAt
+      });
+    }
+  );
 }
 
 export async function listFailures() {
@@ -289,20 +337,23 @@ export async function saveOkkiSync(sync) {
     createdAt: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const syncs = await readJson(okkiSyncsPath, []);
-    syncs.push(record);
-    await writeJson(okkiSyncsPath, syncs.slice(-storageLimits.okkiSyncs));
-    return;
-  }
-
-  await supabaseInsert("okki_syncs", {
-    id: record.id,
-    customer_id: sync.customerId || "",
-    message_id: sync.messageId || "",
-    payload: record,
-    created_at: record.createdAt
-  });
+  return withSupabaseFallback(
+    "Supabase okki_syncs INSERT failed",
+    async () => {
+      const syncs = await readJson(okkiSyncsPath, []);
+      syncs.push(record);
+      await writeJson(okkiSyncsPath, syncs.slice(-storageLimits.okkiSyncs));
+    },
+    async () => {
+      await supabaseInsert("okki_syncs", {
+        id: record.id,
+        customer_id: sync.customerId || "",
+        message_id: sync.messageId || "",
+        payload: record,
+        created_at: record.createdAt
+      });
+    }
+  );
 }
 
 export async function listOkkiSyncs() {
@@ -325,23 +376,26 @@ export async function saveMessageEvent(event) {
     createdAt: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const events = await readJson(messageEventsPath, []);
-    events.push(record);
-    await writeJson(messageEventsPath, events.slice(-storageLimits.messageEvents));
-    return;
-  }
-
-  await supabaseInsert("message_events", {
-    id: record.id,
-    customer_id: event.customerId || "",
-    message_id: event.messageId || "",
-    direction: event.direction || "",
-    event_type: event.type || "",
-    category: event.category || "",
-    payload: record,
-    created_at: record.createdAt
-  });
+  return withSupabaseFallback(
+    "Supabase message_events INSERT failed",
+    async () => {
+      const events = await readJson(messageEventsPath, []);
+      events.push(record);
+      await writeJson(messageEventsPath, events.slice(-storageLimits.messageEvents));
+    },
+    async () => {
+      await supabaseInsert("message_events", {
+        id: record.id,
+        customer_id: event.customerId || "",
+        message_id: event.messageId || "",
+        direction: event.direction || "",
+        event_type: event.type || "",
+        category: event.category || "",
+        payload: record,
+        created_at: record.createdAt
+      });
+    }
+  );
 }
 
 export async function listMessageEvents() {
@@ -358,17 +412,21 @@ export async function listMessageEvents() {
 }
 
 export async function isKnownCustomer(customerId) {
-  if (!isSupabaseEnabled()) {
-    const knownCustomers = await readJson(knownCustomersPath, {});
-    return Boolean(knownCustomers[customerId]);
-  }
-
-  const rows = await supabaseSelect("known_customers", {
-    select: "customer_id",
-    customer_id: `eq.${customerId}`,
-    limit: "1"
-  });
-  return rows.length > 0;
+  return withSupabaseFallback(
+    "Supabase known_customers GET failed",
+    async () => {
+      const knownCustomers = await readJson(knownCustomersPath, {});
+      return Boolean(knownCustomers[customerId]);
+    },
+    async () => {
+      const rows = await supabaseSelect("known_customers", {
+        select: "customer_id",
+        customer_id: `eq.${customerId}`,
+        limit: "1"
+      });
+      return rows.length > 0;
+    }
+  );
 }
 
 export async function listKnownCustomers() {
@@ -399,37 +457,44 @@ export async function markKnownCustomer(customerId, reason = "okki") {
     updated_at: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const knownCustomers = await readJson(knownCustomersPath, {});
-    knownCustomers[customerId] = {
-      reason,
-      updatedAt: row.updated_at
-    };
-    await writeJson(knownCustomersPath, knownCustomers);
-    return;
-  }
-
-  await supabaseUpsert("known_customers", row, "customer_id");
+  return withSupabaseFallback(
+    "Supabase known_customers UPSERT failed",
+    async () => {
+      const knownCustomers = await readJson(knownCustomersPath, {});
+      knownCustomers[customerId] = {
+        reason,
+        updatedAt: row.updated_at
+      };
+      await writeJson(knownCustomersPath, knownCustomers);
+    },
+    async () => {
+      await supabaseUpsert("known_customers", row, "customer_id");
+    }
+  );
 }
 
 export async function getHandoffWindow(customerId) {
-  if (!isSupabaseEnabled()) {
-    const handoffWindows = await readJson(handoffWindowsPath, {});
-    return handoffWindows[customerId] || null;
-  }
-
-  const rows = await supabaseSelect("handoff_windows", {
-    select: "customer_id,completed_at,reminder_sent,reminder_sent_at",
-    customer_id: `eq.${customerId}`,
-    limit: "1"
-  });
-  return rows[0]
-    ? {
-        completedAt: rows[0].completed_at,
-        reminderSent: rows[0].reminder_sent,
-        reminderSentAt: rows[0].reminder_sent_at
-      }
-    : null;
+  return withSupabaseFallback(
+    "Supabase handoff_windows GET failed",
+    async () => {
+      const handoffWindows = await readJson(handoffWindowsPath, {});
+      return handoffWindows[customerId] || null;
+    },
+    async () => {
+      const rows = await supabaseSelect("handoff_windows", {
+        select: "customer_id,completed_at,reminder_sent,reminder_sent_at",
+        customer_id: `eq.${customerId}`,
+        limit: "1"
+      });
+      return rows[0]
+        ? {
+            completedAt: rows[0].completed_at,
+            reminderSent: rows[0].reminder_sent,
+            reminderSentAt: rows[0].reminder_sent_at
+          }
+        : null;
+    }
+  );
 }
 
 export async function listHandoffWindows() {
@@ -462,58 +527,67 @@ export async function markHandoffWindow(customerId) {
     reminder_sent_at: null
   };
 
-  if (!isSupabaseEnabled()) {
-    const handoffWindows = await readJson(handoffWindowsPath, {});
-    handoffWindows[customerId] = {
-      completedAt: row.completed_at,
-      reminderSent: false
-    };
-    await writeJson(handoffWindowsPath, handoffWindows);
-    return;
-  }
-
-  await supabaseUpsert("handoff_windows", row, "customer_id");
+  return withSupabaseFallback(
+    "Supabase handoff_windows UPSERT failed",
+    async () => {
+      const handoffWindows = await readJson(handoffWindowsPath, {});
+      handoffWindows[customerId] = {
+        completedAt: row.completed_at,
+        reminderSent: false
+      };
+      await writeJson(handoffWindowsPath, handoffWindows);
+    },
+    async () => {
+      await supabaseUpsert("handoff_windows", row, "customer_id");
+    }
+  );
 }
 
 export async function markHandoffReminderSent(customerId) {
   const reminderSentAt = new Date().toISOString();
-
-  if (!isSupabaseEnabled()) {
-    const handoffWindows = await readJson(handoffWindowsPath, {});
-    handoffWindows[customerId] = {
-      ...(handoffWindows[customerId] || {}),
-      reminderSent: true,
-      reminderSentAt
-    };
-    await writeJson(handoffWindowsPath, handoffWindows);
-    return;
-  }
-
-  const existing = await getHandoffWindow(customerId);
-  await supabaseUpsert(
-    "handoff_windows",
-    {
-      customer_id: customerId,
-      completed_at: existing?.completedAt || reminderSentAt,
-      reminder_sent: true,
-      reminder_sent_at: reminderSentAt
+  return withSupabaseFallback(
+    "Supabase handoff_windows reminder UPSERT failed",
+    async () => {
+      const handoffWindows = await readJson(handoffWindowsPath, {});
+      handoffWindows[customerId] = {
+        ...(handoffWindows[customerId] || {}),
+        reminderSent: true,
+        reminderSentAt
+      };
+      await writeJson(handoffWindowsPath, handoffWindows);
     },
-    "customer_id"
+    async () => {
+      const existing = await getHandoffWindow(customerId);
+      await supabaseUpsert(
+        "handoff_windows",
+        {
+          customer_id: customerId,
+          completed_at: existing?.completedAt || reminderSentAt,
+          reminder_sent: true,
+          reminder_sent_at: reminderSentAt
+        },
+        "customer_id"
+      );
+    }
   );
 }
 
 export async function wasEmmaReplySent(customerId) {
-  if (!isSupabaseEnabled()) {
-    const emmaReplies = await readJson(emmaRepliesPath, {});
-    return Boolean(emmaReplies[customerId]);
-  }
-
-  const rows = await supabaseSelect("emma_replies", {
-    select: "customer_id",
-    customer_id: `eq.${customerId}`,
-    limit: "1"
-  });
-  return rows.length > 0;
+  return withSupabaseFallback(
+    "Supabase emma_replies GET failed",
+    async () => {
+      const emmaReplies = await readJson(emmaRepliesPath, {});
+      return Boolean(emmaReplies[customerId]);
+    },
+    async () => {
+      const rows = await supabaseSelect("emma_replies", {
+        select: "customer_id",
+        customer_id: `eq.${customerId}`,
+        limit: "1"
+      });
+      return rows.length > 0;
+    }
+  );
 }
 
 export async function listEmmaReplies() {
@@ -544,15 +618,18 @@ export async function markEmmaReplySent(customerId, reason = "existing_customer"
     sent_at: new Date().toISOString()
   };
 
-  if (!isSupabaseEnabled()) {
-    const emmaReplies = await readJson(emmaRepliesPath, {});
-    emmaReplies[customerId] = {
-      reason,
-      sentAt: row.sent_at
-    };
-    await writeJson(emmaRepliesPath, emmaReplies);
-    return;
-  }
-
-  await supabaseUpsert("emma_replies", row, "customer_id");
+  return withSupabaseFallback(
+    "Supabase emma_replies UPSERT failed",
+    async () => {
+      const emmaReplies = await readJson(emmaRepliesPath, {});
+      emmaReplies[customerId] = {
+        reason,
+        sentAt: row.sent_at
+      };
+      await writeJson(emmaRepliesPath, emmaReplies);
+    },
+    async () => {
+      await supabaseUpsert("emma_replies", row, "customer_id");
+    }
+  );
 }

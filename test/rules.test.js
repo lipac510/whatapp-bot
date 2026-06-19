@@ -7,6 +7,7 @@ import {
   isOfficialCodeMessage,
   isRestrictedCountry,
   isValidQuantityAnswer,
+  normalizeQuantityAnswer,
   normalizeProductAnswer,
   parseQuantity,
   validateInquiryForRecording
@@ -29,6 +30,8 @@ test("parses quantities", () => {
   assert.equal(parseQuantity("5,000 pcs"), 5000);
   assert.equal(parseQuantity("20k"), 20000);
   assert.equal(isHighValueQuantity("5000 pcs"), true);
+  assert.equal(normalizeQuantityAnswer("1000 paper bag"), "1000");
+  assert.equal(normalizeQuantityAnswer("2k"), "2000 pcs");
 });
 
 test("validates quantity answers", () => {

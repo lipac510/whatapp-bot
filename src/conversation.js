@@ -2,6 +2,7 @@ import {
   isHighValueQuantity,
   isMeaningfulAddressAnswer,
   isValidQuantityAnswer,
+  normalizeQuantityAnswer,
   normalizeProductAnswer
 } from "./rules.js";
 
@@ -173,9 +174,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   if (session.step === "complete") {
     return {
       session,
-      replies: [
-        "We have already received your inquiry. To submit a new one, please reply \"restart\"."
-      ],
+      replies: [handoffReminderMessage],
       complete: false
     };
   }
@@ -256,7 +255,12 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     data: {
       ...session.data,
       customerLinks,
-      [step]: step === "product" ? normalizeProductAnswer(text) : text
+      [step]:
+        step === "product"
+          ? normalizeProductAnswer(text)
+          : step === "quantity"
+            ? normalizeQuantityAnswer(text)
+            : text
     }
   };
 

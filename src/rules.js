@@ -105,6 +105,22 @@ export function parseQuantity(value) {
   return match[2] === "k" ? number * 1000 : number;
 }
 
+export function normalizeQuantityAnswer(value) {
+  const text = String(value || "").toLowerCase().replace(/,/g, " ").trim();
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(k|pcs|pc|pieces|只|个)?/i);
+  if (!match) return "";
+
+  const number = Number(match[1]);
+  if (!Number.isFinite(number) || number <= 0) return "";
+
+  if (match[2] && match[2].toLowerCase() === "k") {
+    return `${number * 1000} pcs`;
+  }
+
+  const normalizedUnit = match[2] ? " pcs" : "";
+  return `${number}${normalizedUnit}`;
+}
+
 export function isHighValueQuantity(quantityText, threshold = 5000) {
   return parseQuantity(quantityText) >= threshold;
 }

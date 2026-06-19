@@ -4,6 +4,7 @@ import {
   handleCustomerImage,
   handleCustomerMessage,
   handleCustomerVideo,
+  handoffReminderMessage,
   startConversation
 } from "../src/conversation.js";
 
@@ -190,4 +191,16 @@ test("does not reply to attachments after inquiry is already complete", () => {
   );
 
   assert.deepEqual(attachmentResult.replies, []);
+});
+
+test("does not restart after inquiry is already complete", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "2", "Alice");
+  result = handleCustomerMessage(result.session, "5000", "Alice");
+
+  const followUp = handleCustomerMessage(result.session, "hi", "Alice");
+
+  assert.equal(followUp.complete, false);
+  assert.deepEqual(followUp.replies, [handoffReminderMessage]);
+  assert.equal(followUp.session.step, "complete");
 });

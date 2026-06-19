@@ -149,6 +149,10 @@ function isExistingCustomerError(message) {
   return /已存在|already exists|exist/i.test(String(message || ""));
 }
 
+function isRetryableCountryError(message) {
+  return /国家地区.*不能为空|country.*empty|country.*required|invalid country/i.test(String(message || ""));
+}
+
 function isWithinHours(isoDate, hours) {
   const time = new Date(isoDate).getTime();
   if (!Number.isFinite(time)) return false;
@@ -383,18 +387,18 @@ async function handleWebhookPost(request, response) {
           await sendAndLogText(message.from, retryPrompt, { category: "conversation_reply" });
           continue;
         }
-        await saveInquiry(inquiry);
-        await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
-          messageId: message.id,
-          product: inquiry.product,
-          quantity: inquiry.quantity,
-          address: inquiry.address
-        });
-        await clearSession(message.from);
         console.log(`New inquiry from ${message.from}\n${formatInquiryForLog(result.inquiry)}`);
 
         const rejection = shouldRejectInquiry(inquiry);
         if (rejection.rejected) {
+          await saveInquiry(inquiry);
+          await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
+            messageId: message.id,
+            product: inquiry.product,
+            quantity: inquiry.quantity,
+            address: inquiry.address
+          });
+          await clearSession(message.from);
           await sendAndLogText(message.from, noShippingAgentReply, { category: "restricted_country" });
           await saveFailure({
             messageId: message.id,
@@ -413,6 +417,13 @@ async function handleWebhookPost(request, response) {
         try {
           const okki = await createOkkiCustomerFromInquiry(inquiry);
           if (okki.enabled) {
+            await saveInquiry(inquiry);
+            await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
+              messageId: message.id,
+              product: inquiry.product,
+              quantity: inquiry.quantity,
+              address: inquiry.address
+            });
             console.log(`OKKI customer synced for ${message.from}`);
             await markKnownCustomer(message.from, "okki_synced");
             await markHandoffWindow(message.from);
@@ -425,8 +436,18 @@ async function handleWebhookPost(request, response) {
             await saveSystemEvent(message.from, "OKKI customer synced", "okki_synced", {
               messageId: message.id
             });
+            await clearSession(message.from);
           } else {
+            await saveInquiry(inquiry);
+            await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
+              messageId: message.id,
+              product: inquiry.product,
+              quantity: inquiry.quantity,
+              address: inquiry.address
+            });
             console.log("OKKI sync skipped because OKKI_CLIENT_ID/OKKI_CLIENT_SECRET are not configured");
+            await markKnownCustomer(message.from, "inquiry_completed");
+            await markHandoffWindow(message.from);
             await saveOkkiSync({
               messageId: message.id,
               customerId: message.from,
@@ -436,6 +457,7 @@ async function handleWebhookPost(request, response) {
             await saveSystemEvent(message.from, "OKKI sync skipped", "okki_skipped", {
               messageId: message.id
             });
+            await clearSession(message.from);
           }
 
           for (const reply of result.replies) {
@@ -445,8 +467,35 @@ async function handleWebhookPost(request, response) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
           if (isExistingCustomerError(okkiError.message)) {
             await markKnownCustomer(message.from, "okki_existing");
+            await clearSession(message.from);
             await sendEmmaReplyOnce(message.from, "okki_existing");
+          } else if (isRetryableCountryError(okkiError.message)) {
+            const repairedSession = {
+              ...result.session,
+              step: "address",
+              attachmentPromptedStep: "",
+              completedAt: "",
+              data: {
+                ...result.session.data
+              }
+            };
+            await saveSession(message.from, repairedSession);
+            await sendAndLogText(
+              message.from,
+              "Please share your country or full shipping address, for example: Qatar or Porto Arabia tower 24, Doha, Qatar.",
+              { category: "conversation_reply" }
+            );
           } else {
+            await saveInquiry(inquiry);
+            await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
+              messageId: message.id,
+              product: inquiry.product,
+              quantity: inquiry.quantity,
+              address: inquiry.address
+            });
+            await markKnownCustomer(message.from, "inquiry_completed");
+            await markHandoffWindow(message.from);
+            await clearSession(message.from);
             for (const reply of result.replies) {
               await sendAndLogText(message.from, reply, { category: "conversation_reply" });
             }
