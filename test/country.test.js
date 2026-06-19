@@ -13,6 +13,8 @@ test("infers country from address text first", () => {
   assert.equal(inferCountryFromText("江苏省苏州市 China"), "CN");
   assert.equal(inferCountryFromText("Mumbai India"), "IN");
   assert.equal(inferCountryFromText("Mexico City"), "MX");
+  assert.equal(inferCountryFromText("Qatar"), "QA");
+  assert.equal(inferCountryFromText("Doha Qatar"), "QA");
   assert.equal(inferCountryFromText("OMAN MUSCUT"), "OM");
   assert.equal(inferCountryFromText("Delivery to Muscat Oman"), "OM");
 });
@@ -21,6 +23,7 @@ test("infers country from WhatsApp phone prefix", () => {
   assert.equal(inferCountryFromPhone("8618014856231"), "CN");
   assert.equal(inferCountryFromPhone("+971501234567"), "AE");
   assert.equal(inferCountryFromPhone("966501234567"), "SA");
+  assert.equal(inferCountryFromPhone("97451111111"), "QA");
   assert.equal(inferCountryFromPhone("+96891234567"), "OM");
   assert.equal(inferCountryFromPhone("918888888888"), "IN");
   assert.equal(inferCountryFromPhone("521234567890"), "MX");

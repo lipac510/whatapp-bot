@@ -38,6 +38,7 @@ import {
 import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
 import { inferCountry } from "./country.js";
 import {
+  canResolveInquiryCountry,
   existingCustomerReply,
   isHumanHandoffRequest,
   isMeaningfulAddressAnswer,
@@ -137,6 +138,9 @@ function getInquiryQualityError(inquiry) {
   }
   if (inquiry.fastTrack && inquiry.address && !isMeaningfulAddressAnswer(inquiry.address)) {
     return "Invalid shipping address";
+  }
+  if (!canResolveInquiryCountry(inquiry)) {
+    return "Country could not be resolved";
   }
   return "";
 }

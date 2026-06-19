@@ -1,4 +1,4 @@
-import { inferCountryFromText } from "./country.js";
+import { inferCountry, inferCountryFromText } from "./country.js";
 
 const productOptions = new Map([
   ["1", "Corrugated Box"],
@@ -135,6 +135,15 @@ export function isMeaningfulAddressAnswer(value) {
   return false;
 }
 
+export function canResolveInquiryCountry(inquiry = {}) {
+  return Boolean(
+    inferCountry({
+      address: inquiry.address || "",
+      phone: inquiry.customerId || ""
+    })
+  );
+}
+
 export function validateInquiryForRecording(inquiry = {}) {
   if (!normalizeProductAnswer(inquiry.product || "")) {
     return "Invalid product";
@@ -147,6 +156,9 @@ export function validateInquiryForRecording(inquiry = {}) {
   }
   if (inquiry.fastTrack && inquiry.address && !isMeaningfulAddressAnswer(inquiry.address)) {
     return "Invalid shipping address";
+  }
+  if (!canResolveInquiryCountry(inquiry)) {
+    return "Country could not be resolved";
   }
   return "";
 }

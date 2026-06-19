@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canResolveInquiryCountry,
   isHighValueQuantity,
   isMeaningfulAddressAnswer,
   isOfficialCodeMessage,
@@ -47,22 +48,42 @@ test("validates shipping addresses", () => {
 
 test("validates inquiry before recording", () => {
   assert.equal(validateInquiryForRecording({
+    customerId: "8618014856231",
     product: "Corrugated Box",
     quantity: "1000",
     address: "Canada"
   }), "");
 
   assert.equal(validateInquiryForRecording({
+    customerId: "8618014856231",
     product: "Corrugated Box",
     quantity: "hi",
     address: "Canada"
   }), "Invalid quantity");
 
   assert.equal(validateInquiryForRecording({
+    customerId: "8618014856231",
     product: "Corrugated Box",
     quantity: "1000",
     address: "hi"
   }), "Invalid shipping address");
+});
+
+test("resolves country from address text or WhatsApp phone", () => {
+  assert.equal(canResolveInquiryCountry({
+    customerId: "97451111111",
+    address: "Porto Arabia tower 24"
+  }), true);
+
+  assert.equal(canResolveInquiryCountry({
+    customerId: "8618014856231",
+    address: "Qatar"
+  }), true);
+
+  assert.equal(canResolveInquiryCountry({
+    customerId: "",
+    address: "Unknown destination"
+  }), false);
 });
 
 test("detects official code messages", () => {
