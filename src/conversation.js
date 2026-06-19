@@ -1,5 +1,7 @@
 import {
   isHighValueQuantity,
+  isMeaningfulAddressAnswer,
+  isValidQuantityAnswer,
   normalizeProductAnswer
 } from "./rules.js";
 
@@ -98,6 +100,12 @@ function validateStepAnswer(step, text) {
   if (step === "product" && !normalizeProductAnswer(text)) {
     return "Please reply with 1, 2, 3, or 4, or tell us the packaging product you need.";
   }
+  if (step === "quantity" && !isValidQuantityAnswer(text)) {
+    return "Please tell us the quantity you need, for example: 1000 pcs.";
+  }
+  if (step === "address" && !isMeaningfulAddressAnswer(text)) {
+    return "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
+  }
   return "";
 }
 
@@ -124,13 +132,18 @@ function buildSummary(data) {
     "Inquiry details:",
     `Product: ${data.product}`,
     `Quantity: ${data.quantity}`,
-    `Shipping address:${data.address || ""}`,
+    `Shipping address: ${data.address || ""}`,
     imageCount ? `Photos received: ${imageCount}` : "",
     videoCount ? `Videos received: ${videoCount}` : "",
     linkCount ? `Links received: ${linkCount}` : "",
     "",
     handoffReminderMessage
   ].filter((line) => line !== "").join("\n");
+}
+
+function buildAttachmentReply(step, attachmentType) {
+  const label = attachmentType === "video" ? "video" : "photo";
+  return `Your ${label} has been received. You can continue sending attachments.\n\n${prompts[step]}`;
 }
 
 export function startConversation(profileName = "") {
@@ -285,7 +298,8 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   return {
     session: {
       ...updated,
-      step: upcoming
+      step: upcoming,
+      attachmentPromptedStep: ""
     },
     replies: [prompts[upcoming]],
     complete: false
@@ -312,9 +326,20 @@ export function handleCustomerAttachment(session, attachmentType, attachmentLink
     };
   }
 
+  if (updated.attachmentPromptedStep === updated.step) {
+    return {
+      session: updated,
+      replies: [],
+      complete: false
+    };
+  }
+
   return {
-    session: updated,
-    replies: [],
+    session: {
+      ...updated,
+      attachmentPromptedStep: updated.step
+    },
+    replies: [buildAttachmentReply(updated.step, attachmentType)],
     complete: false
   };
 }

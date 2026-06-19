@@ -87,6 +87,27 @@ test("rejects low-information product answers", () => {
   assert.match(result.replies[0], /reply with 1, 2, 3, or 4/);
 });
 
+test("rejects invalid quantity answers", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "1", "Alice");
+  result = handleCustomerMessage(result.session, "hi", "Alice");
+
+  assert.equal(result.session.step, "quantity");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /quantity you need, for example: 1000 pcs/i);
+});
+
+test("rejects invalid shipping address answers", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "1", "Alice");
+  result = handleCustomerMessage(result.session, "1000", "Alice");
+  result = handleCustomerMessage(result.session, "hi", "Alice");
+
+  assert.equal(result.session.step, "address");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /share your country or shipping address/i);
+});
+
 test("saves product links but keeps asking for product", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "https://example.com/product", "Alice");
@@ -115,7 +136,8 @@ test("collects image links without advancing the conversation", () => {
 
   assert.equal(result.session.step, "product");
   assert.deepEqual(result.session.data.imageLinks, ["https://example.com/media/abc"]);
-  assert.deepEqual(result.replies, []);
+  assert.match(result.replies[0], /Your photo has been received/i);
+  assert.match(result.replies[0], /what kind of packaging do you need/i);
 
   result = handleCustomerMessage(result.session, "Paper bag", "Alice");
   result = handleCustomerMessage(result.session, "5000 pcs", "Alice");
@@ -133,7 +155,7 @@ test("collects customer links and video links", () => {
     "Alice"
   );
   result = handleCustomerVideo(result.session, "https://example.com/media/video", "Alice");
-  assert.deepEqual(result.replies, []);
+  assert.match(result.replies[0], /Your video has been received/i);
   result = handleCustomerMessage(result.session, "5000 pcs", "Alice");
 
   assert.equal(result.complete, true);
@@ -141,6 +163,19 @@ test("collects customer links and video links", () => {
   assert.deepEqual(result.inquiry.videoLinks, ["https://example.com/media/video"]);
   assert.match(result.replies[0], /Videos received: 1/);
   assert.match(result.replies[0], /Links received: 1/);
+});
+
+test("replies only once when multiple attachments arrive in the same step", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerImage(result.session, "https://example.com/media/1", "Alice");
+  assert.match(result.replies[0], /Your photo has been received/i);
+
+  result = handleCustomerImage(result.session, "https://example.com/media/2", "Alice");
+  assert.deepEqual(result.replies, []);
+  assert.deepEqual(result.session.data.imageLinks, [
+    "https://example.com/media/1",
+    "https://example.com/media/2"
+  ]);
 });
 
 test("does not reply to attachments after inquiry is already complete", () => {

@@ -40,8 +40,10 @@ import { inferCountry } from "./country.js";
 import {
   existingCustomerReply,
   isHumanHandoffRequest,
+  isMeaningfulAddressAnswer,
   isOfficialCodeMessage,
   isRestrictedCountry,
+  isValidQuantityAnswer,
   noShippingAgentReply,
   parseQuantity
 } from "./rules.js";
@@ -124,6 +126,19 @@ function shouldRejectInquiry(inquiry) {
     quantity,
     rejected: isRestrictedCountry(country) && quantity < 20000
   };
+}
+
+function getInquiryQualityError(inquiry) {
+  if (!isValidQuantityAnswer(inquiry.quantity || "")) {
+    return "Invalid quantity";
+  }
+  if (!inquiry.fastTrack && !isMeaningfulAddressAnswer(inquiry.address || "")) {
+    return "Invalid shipping address";
+  }
+  if (inquiry.fastTrack && inquiry.address && !isMeaningfulAddressAnswer(inquiry.address)) {
+    return "Invalid shipping address";
+  }
+  return "";
 }
 
 function isExistingCustomerError(message) {
@@ -332,6 +347,38 @@ async function handleWebhookPost(request, response) {
           profileName: result.session.profileName,
           ...result.inquiry
         };
+        const inquiryQualityError = getInquiryQualityError(inquiry);
+        if (inquiryQualityError) {
+          const fallbackStep = inquiryQualityError === "Invalid quantity" ? "quantity" : "address";
+          const repairedSession = {
+            ...result.session,
+            step: fallbackStep,
+            attachmentPromptedStep: "",
+            completedAt: "",
+            data: {
+              ...result.session.data,
+              [fallbackStep]: ""
+            }
+          };
+
+          await saveSession(message.from, repairedSession);
+          await saveFailure({
+            messageId: message.id,
+            customerId: message.from,
+            text: message.text || message.type,
+            error: `Inquiry validation failed: ${inquiryQualityError}`
+          });
+          await saveSystemEvent(message.from, "Inquiry validation failed", "inquiry_validation_failed", {
+            messageId: message.id,
+            error: inquiryQualityError
+          });
+
+          const retryPrompt = fallbackStep === "quantity"
+            ? "Please tell us the quantity you need, for example: 1000 pcs."
+            : "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
+          await sendAndLogText(message.from, retryPrompt, { category: "conversation_reply" });
+          continue;
+        }
         await saveInquiry(inquiry);
         await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
           messageId: message.id,

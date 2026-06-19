@@ -1,3 +1,5 @@
+import { inferCountryFromText } from "./country.js";
+
 const productOptions = new Map([
   ["1", "Corrugated Box"],
   ["2", "Luxury Rigid Box"],
@@ -109,4 +111,42 @@ export function isHighValueQuantity(quantityText, threshold = 5000) {
 
 export function isRestrictedCountry(countryCode) {
   return restrictedCountries.has(countryCode) || latinAmericaCountries.has(countryCode);
+}
+
+export function isLowInformationText(value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  return lowInformationPattern.test(text) || urlOnlyPattern.test(text);
+}
+
+export function isValidQuantityAnswer(value) {
+  if (isLowInformationText(value)) return false;
+  return parseQuantity(value) > 0;
+}
+
+export function isMeaningfulAddressAnswer(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (isLowInformationText(text)) return false;
+  if (numberOnlyPattern.test(text)) return false;
+  if (inferCountryFromText(text)) return true;
+  if (/[\u4e00-\u9fff]{2,}/.test(text)) return true;
+  if (/[a-z]{2,}/i.test(text)) return true;
+  return false;
+}
+
+export function validateInquiryForRecording(inquiry = {}) {
+  if (!normalizeProductAnswer(inquiry.product || "")) {
+    return "Invalid product";
+  }
+  if (!isValidQuantityAnswer(inquiry.quantity || "")) {
+    return "Invalid quantity";
+  }
+  if (!inquiry.fastTrack && !isMeaningfulAddressAnswer(inquiry.address || "")) {
+    return "Invalid shipping address";
+  }
+  if (inquiry.fastTrack && inquiry.address && !isMeaningfulAddressAnswer(inquiry.address)) {
+    return "Invalid shipping address";
+  }
+  return "";
 }

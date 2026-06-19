@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isHighValueQuantity,
+  isMeaningfulAddressAnswer,
   isOfficialCodeMessage,
   isRestrictedCountry,
+  isValidQuantityAnswer,
   normalizeProductAnswer,
-  parseQuantity
+  parseQuantity,
+  validateInquiryForRecording
 } from "../src/rules.js";
 
 test("maps product option numbers to product names", () => {
@@ -25,6 +28,41 @@ test("parses quantities", () => {
   assert.equal(parseQuantity("5,000 pcs"), 5000);
   assert.equal(parseQuantity("20k"), 20000);
   assert.equal(isHighValueQuantity("5000 pcs"), true);
+});
+
+test("validates quantity answers", () => {
+  assert.equal(isValidQuantityAnswer("1000 pcs"), true);
+  assert.equal(isValidQuantityAnswer("2k"), true);
+  assert.equal(isValidQuantityAnswer("hi"), false);
+  assert.equal(isValidQuantityAnswer(""), false);
+});
+
+test("validates shipping addresses", () => {
+  assert.equal(isMeaningfulAddressAnswer("Canada"), true);
+  assert.equal(isMeaningfulAddressAnswer("Dubai, UAE"), true);
+  assert.equal(isMeaningfulAddressAnswer("南京太平南路"), true);
+  assert.equal(isMeaningfulAddressAnswer("hi"), false);
+  assert.equal(isMeaningfulAddressAnswer("12345"), false);
+});
+
+test("validates inquiry before recording", () => {
+  assert.equal(validateInquiryForRecording({
+    product: "Corrugated Box",
+    quantity: "1000",
+    address: "Canada"
+  }), "");
+
+  assert.equal(validateInquiryForRecording({
+    product: "Corrugated Box",
+    quantity: "hi",
+    address: "Canada"
+  }), "Invalid quantity");
+
+  assert.equal(validateInquiryForRecording({
+    product: "Corrugated Box",
+    quantity: "1000",
+    address: "hi"
+  }), "Invalid shipping address");
 });
 
 test("detects official code messages", () => {
