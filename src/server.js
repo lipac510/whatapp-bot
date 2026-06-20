@@ -27,7 +27,7 @@ import {
   saveSession,
   wasEmmaReplySent
 } from "./storage.js";
-import { buildAdminModel, renderAdminPage } from "./admin.js";
+import { buildAdminModel, renderAdminCsv, renderAdminPage } from "./admin.js";
 import {
   formatInquiryForLog,
   handleCustomerImage,
@@ -635,6 +635,28 @@ async function handleRequest(request, response) {
       };
       const model = buildAdminModel({ ...payload, query });
       sendHtml(response, 200, renderAdminPage({ ...payload, model, selectedCustomerId, query }));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/admin/export.csv") {
+      if (!requireAdmin(request, response)) return;
+      const query = url.searchParams.get("q") || "";
+      const payload = {
+        messages: await listMessageEvents(),
+        inquiries: await listInquiries(),
+        failures: await listFailures(),
+        okkiSyncs: await listOkkiSyncs(),
+        sessions: await listSessions(),
+        knownCustomers: await listKnownCustomers(),
+        handoffWindows: await listHandoffWindows(),
+        emmaReplies: await listEmmaReplies()
+      };
+      const model = buildAdminModel({ ...payload, query });
+      response.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="whatsapp-bot-admin.csv"'
+      });
+      response.end(renderAdminCsv(model));
       return;
     }
 

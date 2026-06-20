@@ -13,12 +13,13 @@ const handoffWindowsPath = path.join(config.dataDir, "handoff-windows.json");
 const emmaRepliesPath = path.join(config.dataDir, "emma-replies.json");
 
 const storageLimits = {
-  failures: 200,
-  okkiSyncs: 200,
-  messageEvents: 2000,
+  failures: 1000,
+  okkiSyncs: 1000,
+  messageEvents: 10000,
   processedMessages: 1000
 };
 let supabaseRuntimeDisabled = false;
+const supabasePageSize = 1000;
 
 function randomId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -100,6 +101,25 @@ async function supabaseRequest(method, table, { params = {}, body, prefer } = {}
 
 async function supabaseSelect(table, params = {}) {
   return (await supabaseRequest("GET", table, { params })) || [];
+}
+
+async function supabaseSelectAll(table, params = {}, pageSize = supabasePageSize) {
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const batch = await supabaseSelect(table, {
+      ...params,
+      limit: String(pageSize),
+      offset: String(offset)
+    });
+
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return rows;
 }
 
 async function supabaseInsert(table, row) {
@@ -242,10 +262,9 @@ export async function listInquiries() {
     return readJson(inquiriesPath, []);
   }
 
-  const rows = await supabaseSelect("inquiries", {
+  const rows = await supabaseSelectAll("inquiries", {
     select: "id,payload,created_at",
-    order: "created_at.asc",
-    limit: "1000"
+    order: "created_at.asc"
   });
   return rows.map(rowToStoredPayload);
 }
@@ -322,10 +341,9 @@ export async function listFailures() {
     return readJson(failuresPath, []);
   }
 
-  const rows = await supabaseSelect("failures", {
+  const rows = await supabaseSelectAll("failures", {
     select: "id,payload,created_at",
-    order: "created_at.asc",
-    limit: String(storageLimits.failures)
+    order: "created_at.asc"
   });
   return rows.map(rowToStoredPayload);
 }
@@ -361,10 +379,9 @@ export async function listOkkiSyncs() {
     return readJson(okkiSyncsPath, []);
   }
 
-  const rows = await supabaseSelect("okki_syncs", {
+  const rows = await supabaseSelectAll("okki_syncs", {
     select: "id,payload,created_at",
-    order: "created_at.asc",
-    limit: String(storageLimits.okkiSyncs)
+    order: "created_at.asc"
   });
   return rows.map(rowToStoredPayload);
 }
@@ -403,10 +420,9 @@ export async function listMessageEvents() {
     return readJson(messageEventsPath, []);
   }
 
-  const rows = await supabaseSelect("message_events", {
+  const rows = await supabaseSelectAll("message_events", {
     select: "id,payload,created_at",
-    order: "created_at.asc",
-    limit: String(storageLimits.messageEvents)
+    order: "created_at.asc"
   });
   return rows.map(rowToStoredPayload);
 }

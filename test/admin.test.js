@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAdminModel, renderAdminPage } from "../src/admin.js";
+import { buildAdminModel, renderAdminCsv, renderAdminPage } from "../src/admin.js";
 
 test("builds admin conversations from message and OKKI logs", () => {
   const model = buildAdminModel({
@@ -96,4 +96,57 @@ test("renders admin HTML with escaped customer content", () => {
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /&lt;img src=x&gt;/);
   assert.doesNotMatch(html, /<script>/);
+});
+
+test("renders admin HTML with row number and export link", () => {
+  const model = buildAdminModel({
+    messages: [
+      {
+        customerId: "123",
+        profileName: "Alice",
+        direction: "in",
+        type: "text",
+        text: "hello",
+        createdAt: "2026-06-10T00:00:00.000Z"
+      }
+    ]
+  });
+
+  const html = renderAdminPage({
+    model,
+    messages: model.conversations
+  });
+
+  assert.match(html, /<th>No\.<\/th>/);
+  assert.match(html, /Download Excel/);
+});
+
+test("renders admin csv export", () => {
+  const model = buildAdminModel({
+    messages: [
+      {
+        customerId: "123",
+        profileName: "Alice",
+        direction: "in",
+        type: "text",
+        text: "hello",
+        createdAt: "2026-06-10T00:00:00.000Z"
+      }
+    ],
+    inquiries: [
+      {
+        customerId: "123",
+        product: "Paper Bag",
+        quantity: "500",
+        address: "USA",
+        createdAt: "2026-06-10T00:01:00.000Z"
+      }
+    ]
+  });
+
+  const csv = renderAdminCsv(model);
+
+  assert.match(csv, /"No\.","Customer ID"/);
+  assert.match(csv, /\"123\"/);
+  assert.match(csv, /\"Paper Bag\"/);
 });

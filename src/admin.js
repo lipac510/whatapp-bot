@@ -153,6 +153,49 @@ function renderBadge(status) {
   return `<span class="badge ${escapeHtml(className)}">${escapeHtml(status)}</span>`;
 }
 
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+export function renderAdminCsv(model = {}) {
+  const rows = [
+    [
+      "No.",
+      "Customer ID",
+      "Profile Name",
+      "Status",
+      "Product",
+      "Quantity",
+      "Address",
+      "Messages",
+      "Failures",
+      "OKKI Syncs",
+      "Last Activity"
+    ].map(csvCell).join(",")
+  ];
+
+  (model.conversations || []).forEach((item, index) => {
+    rows.push(
+      [
+        index + 1,
+        item.customerId,
+        item.profileName,
+        item.status,
+        item.product,
+        item.quantity,
+        item.address,
+        item.messageCount,
+        item.failureCount,
+        item.okkiSyncCount,
+        formatTime(item.lastAt)
+      ].map(csvCell).join(",")
+    );
+  });
+
+  return `\uFEFF${rows.join("\n")}\n`;
+}
+
 function renderMessage(message) {
   const direction = message.direction === "out" ? "out" : message.direction === "system" ? "system" : "in";
   const text = message.text || message.label || "";
@@ -214,11 +257,13 @@ export function renderAdminPage({
   selectedCustomerId = "",
   query = ""
 }) {
-  const rows = model.conversations.map((item) => {
+  const exportHref = `/admin/export.csv${query ? `?q=${encodeURIComponent(query)}` : ""}`;
+  const rows = model.conversations.map((item, index) => {
     const active = item.customerId === selectedCustomerId ? " active" : "";
     const href = `/admin?customer=${encodeURIComponent(item.customerId)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
     return `
       <tr class="${active}">
+        <td>${index + 1}</td>
         <td><a href="${href}">${escapeHtml(item.customerId)}</a><br><small>${escapeHtml(item.profileName)}</small></td>
         <td>${renderBadge(item.status)}<br><small>${escapeHtml(item.knownReason)}</small></td>
         <td>${escapeHtml(item.product)}<br><small>${escapeHtml(item.quantity)} · ${escapeHtml(item.address)}</small></td>
@@ -244,6 +289,8 @@ export function renderAdminPage({
     form { display: flex; gap: 8px; }
     input { min-width: 260px; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
     button { padding: 9px 14px; border: 0; border-radius: 6px; background: #2563eb; color: white; font-weight: 700; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .export-link { display: inline-flex; align-items: center; justify-content: center; padding: 9px 14px; border-radius: 6px; background: #0f766e; color: white; font-weight: 700; white-space: nowrap; }
     main { padding: 22px; display: grid; grid-template-columns: minmax(620px, 1fr) minmax(420px, 0.75fr); gap: 18px; align-items: start; }
     .stats { display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 10px; margin-bottom: 14px; }
     .stat, .panel { background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
@@ -278,11 +325,14 @@ export function renderAdminPage({
 <body>
   <header>
     <h1>WhatsApp Bot Admin</h1>
-    <form action="/admin" method="get">
-      <input name="q" value="${escapeHtml(query)}" placeholder="Search phone, name, status, product">
-      ${selectedCustomerId ? `<input type="hidden" name="customer" value="${escapeHtml(selectedCustomerId)}">` : ""}
-      <button type="submit">Search</button>
-    </form>
+    <div class="header-actions">
+      <form action="/admin" method="get">
+        <input name="q" value="${escapeHtml(query)}" placeholder="Search phone, name, status, product">
+        ${selectedCustomerId ? `<input type="hidden" name="customer" value="${escapeHtml(selectedCustomerId)}">` : ""}
+        <button type="submit">Search</button>
+      </form>
+      <a class="export-link" href="${exportHref}">Download Excel</a>
+    </div>
   </header>
   <main>
     <section>
@@ -296,8 +346,8 @@ export function renderAdminPage({
       <section class="panel">
         <h2>Customers</h2>
         <table>
-          <thead><tr><th>Customer</th><th>Status</th><th>Inquiry</th><th>Msgs</th><th>Fails</th><th>Last activity</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="6">No customers found.</td></tr>`}</tbody>
+          <thead><tr><th>No.</th><th>Customer</th><th>Status</th><th>Inquiry</th><th>Msgs</th><th>Fails</th><th>Last activity</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="7">No customers found.</td></tr>`}</tbody>
         </table>
       </section>
     </section>
