@@ -1,16 +1,24 @@
-import { config } from "./config.js";
+import { config, getInstagramToken } from "./config.js";
 
 const ROUTING_PREFIX = "instagram:";
 
-// Instagram-scoped sender ids are namespaced so they never collide with WhatsApp phone
-// numbers in shared storage (sessions / known_customers / handoff_windows / ...).
-export function toRoutingId(igUserId) {
-  return `${ROUTING_PREFIX}${igUserId}`;
+// Routing id format: `instagram:<accountId>:<igUserId>`.
+//  - accountId  = the Instagram business account that RECEIVED the message (so one webhook
+//    can serve several accounts; replies are sent with that account's token).
+//  - igUserId   = the customer's Instagram-scoped id (the recipient when we reply).
+// The prefix also keeps these ids from colliding with WhatsApp phone numbers in storage.
+export function toRoutingId(accountId, igUserId) {
+  return `${ROUTING_PREFIX}${accountId || "_"}:${igUserId}`;
 }
 
-export function stripRoutingPrefix(value) {
+export function parseRoutingId(value) {
   const text = String(value || "");
-  return text.startsWith(ROUTING_PREFIX) ? text.slice(ROUTING_PREFIX.length) : text;
+  const body = text.startsWith(ROUTING_PREFIX) ? text.slice(ROUTING_PREFIX.length) : text;
+  const sep = body.indexOf(":");
+  if (sep === -1) {
+    return { accountId: "", igUserId: body };
+  }
+  return { accountId: body.slice(0, sep), igUserId: body.slice(sep + 1) };
 }
 
 function classifyAttachment(attachment) {
@@ -25,8 +33,8 @@ function classifyAttachment(attachment) {
   return { kind: "link", url };
 }
 
-// Instagram Messaging is delivered through the Messenger Platform shape:
-//   { object: "instagram", entry: [ { messaging: [ { sender, recipient, message, ... } ] } ] }
+// Instagram messaging is delivered through the Messenger Platform shape:
+//   { object: "instagram", entry: [ { id, messaging: [ { sender, recipient, message, ... } ] } ] }
 // We keep ONLY genuine inbound customer messages and drop echoes, read receipts,
 // delivery receipts and reactions so the bot never replies to its own output.
 export function extractIncomingMessages(webhookBody) {
@@ -41,10 +49,13 @@ export function extractIncomingMessages(webhookBody) {
       const igUserId = event.sender?.id;
       if (!igUserId) continue;
 
+      const accountId = event.recipient?.id || entry.id || "";
+
       const base = {
         id: message.mid,
-        from: toRoutingId(igUserId),
+        from: toRoutingId(accountId, igUserId),
         igUserId,
+        igAccountId: accountId,
         profileName: "",
         username: "",
         timestamp: event.timestamp
@@ -86,17 +97,21 @@ export function extractIncomingMessages(webhookBody) {
 }
 
 export async function sendTextMessage(to, body) {
-  const recipientId = stripRoutingPrefix(to);
-  const url = `https://graph.facebook.com/${config.graphApiVersion}/${config.igPageId}/messages`;
+  const { accountId, igUserId } = parseRoutingId(to);
+  const token = getInstagramToken(accountId);
+  if (!token) {
+    throw new Error(`No Instagram access token configured for account ${accountId || "(default)"}`);
+  }
+
+  const url = `https://graph.instagram.com/${config.graphApiVersion}/me/messages`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.igPageAccessToken}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      recipient: { id: recipientId },
-      messaging_type: "RESPONSE",
+      recipient: { id: igUserId },
       message: { text: body }
     })
   });

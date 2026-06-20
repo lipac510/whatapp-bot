@@ -26,6 +26,20 @@ function loadEnvFile(path = ".env") {
 
 loadEnvFile();
 
+// IG_ACCOUNTS maps an Instagram account id to its access token, so one webhook can serve
+// several Instagram accounts. Example: {"17841400000000001":"IGTOKEN1","...":"IGTOKEN2"}.
+// For a single account you can instead just set IG_ACCESS_TOKEN.
+function parseIgAccounts(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    console.warn("IG_ACCOUNTS is not valid JSON; ignoring it.");
+    return {};
+  }
+}
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || (process.env.RENDER ? "0.0.0.0" : "127.0.0.1"),
@@ -33,8 +47,10 @@ export const config = {
   accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
   businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
-  igPageId: process.env.IG_PAGE_ID || "",
-  igPageAccessToken: process.env.IG_PAGE_ACCESS_TOKEN || "",
+  // Instagram API with Instagram login (graph.instagram.com).
+  igAccessToken: process.env.IG_ACCESS_TOKEN || "",
+  igAccounts: parseIgAccounts(process.env.IG_ACCOUNTS),
+  igAppSecret: process.env.IG_APP_SECRET || "",
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "",
   appSecret: process.env.META_APP_SECRET || "",
   businessName: process.env.BUSINESS_NAME || "Lipack Packaging",
@@ -68,12 +84,16 @@ export function hasWhatsappConfig() {
 }
 
 export function hasInstagramConfig() {
-  return Boolean(
-    config.igPageId &&
-      !config.igPageId.includes("replace_with") &&
-      config.igPageAccessToken &&
-      !config.igPageAccessToken.includes("replace_with")
-  );
+  const hasSingleToken =
+    Boolean(config.igAccessToken) && !config.igAccessToken.includes("replace_with");
+  const hasAccountMap = Object.keys(config.igAccounts).length > 0;
+  return hasSingleToken || hasAccountMap;
+}
+
+// Resolve the Instagram access token for the account that received a message.
+// Falls back to the single IG_ACCESS_TOKEN when no per-account token is configured.
+export function getInstagramToken(accountId) {
+  return config.igAccounts[accountId] || config.igAccessToken || "";
 }
 
 export function hasOkkiConfig() {

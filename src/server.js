@@ -59,14 +59,17 @@ const whatsappChannel = {
   extract: (body) => extractIncomingMessages(body),
   sendText: (to, text) => sendTextMessage(to, text),
   resolveMediaUrl: (request, message) =>
-    message.mediaId ? buildMediaUrl(request, message.mediaId) : ""
+    message.mediaId ? buildMediaUrl(request, message.mediaId) : "",
+  // WhatsApp & Instagram-login sign webhooks with different app secrets.
+  appSecret: config.appSecret
 };
 
 const instagramChannel = {
   name: "instagram",
   extract: (body) => instagram.extractIncomingMessages(body),
   sendText: (to, text) => instagram.sendTextMessage(to, text),
-  resolveMediaUrl: (request, message) => instagram.resolveMediaUrl(request, message)
+  resolveMediaUrl: (request, message) => instagram.resolveMediaUrl(request, message),
+  appSecret: config.igAppSecret
 };
 
 function sendJson(response, statusCode, payload) {
@@ -249,14 +252,16 @@ async function readRequestBody(request) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function isValidWebhookSignature(request, rawBody) {
-  if (!shouldVerifyWebhookSignature()) return true;
+function isValidWebhookSignature(request, rawBody, secret) {
+  // No secret configured for this channel → skip verification (keeps the channel usable
+  // before its app secret is set; matches the previous WhatsApp behaviour).
+  if (!secret || secret.includes("replace_with")) return true;
 
   const signature = request.headers["x-hub-signature-256"];
   if (!signature || !signature.startsWith("sha256=")) return false;
 
   const expected = crypto
-    .createHmac("sha256", config.appSecret)
+    .createHmac("sha256", secret)
     .update(rawBody)
     .digest("hex");
   const actual = signature.slice("sha256=".length);
@@ -282,7 +287,7 @@ function verifyWebhook(request, response, url) {
 
 async function handleWebhookPost(request, response, channel) {
   const rawBody = await readRequestBody(request);
-  if (!isValidWebhookSignature(request, rawBody)) {
+  if (!isValidWebhookSignature(request, rawBody, channel.appSecret)) {
     sendJson(response, 403, { error: "Invalid webhook signature" });
     return;
   }
@@ -399,7 +404,8 @@ async function handleWebhookPost(request, response, channel) {
             ? {
                 sourcePlatform: "Instagram",
                 instagramUserId: message.igUserId || "",
-                instagramUsername: message.username || ""
+                instagramUsername: message.username || "",
+                instagramAccountId: message.igAccountId || ""
               }
             : {})
         };
