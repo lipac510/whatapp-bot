@@ -11,6 +11,7 @@ const lowInformationPattern =
   /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|你好|您好|谢谢|在吗|嗨)$/i;
 const urlOnlyPattern = /^https?:\/\/\S+$/i;
 const numberOnlyPattern = /^\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?$/i;
+const strictQuantityPattern = /^\s*\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?\s*$/i;
 
 const officialCodePattern =
   /(\b\d{4,8}\b.{0,80}(是你的|is your|verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp)|(verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp).{0,80}\b\d{4,8}\b)/i;
@@ -107,6 +108,7 @@ export function parseQuantity(value) {
 
 export function normalizeQuantityAnswer(value) {
   const text = String(value || "").toLowerCase().replace(/,/g, " ").trim();
+  if (!strictQuantityPattern.test(text)) return "";
   const match = text.match(/(\d+(?:\.\d+)?)\s*(k|pcs|pc|pieces|只|个)?/i);
   if (!match) return "";
 
@@ -137,6 +139,9 @@ export function isLowInformationText(value) {
 
 export function isValidQuantityAnswer(value) {
   if (isLowInformationText(value)) return false;
+  if (!strictQuantityPattern.test(String(value || "").toLowerCase().replace(/,/g, " ").trim())) {
+    return false;
+  }
   return parseQuantity(value) > 0;
 }
 

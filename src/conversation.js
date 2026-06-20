@@ -1,4 +1,9 @@
 import {
+  getCountryFlag,
+  getCountryName,
+  inferCountryFromPhone
+} from "./country.js";
+import {
   isHighValueQuantity,
   isMeaningfulAddressAnswer,
   isValidQuantityAnswer,
@@ -6,7 +11,7 @@ import {
   normalizeProductAnswer
 } from "./rules.js";
 
-const steps = ["product", "quantity", "address"];
+const steps = ["product", "quantity", "country_confirm", "address"];
 const minimumFastTrackQuantity = 5000;
 const websiteReply = "Please view our web: www.cnlipack.com for more products.";
 const companyAddress =
@@ -49,6 +54,7 @@ const prompts = {
 const labels = {
   product: "采购产品",
   quantity: "采购数量",
+  country_confirm: "国家确认",
   address: "发货地址"
 };
 
@@ -87,6 +93,33 @@ function isCustomQuestion(text) {
     /定制|尺寸|规格|可不可以做|能不能做/.test(normalizeText(text));
 }
 
+function isYesAnswer(text) {
+  return /^(yes|y|yeah|yep|correct|right|ok|okay|sure|是|对|没错)$/i.test(normalizeText(text));
+}
+
+function isNoAnswer(text) {
+  return /^(no|n|nope|not|another|不是|不对|不是这个)$/i.test(normalizeText(text));
+}
+
+function buildCountryConfirmationPrompt(countryCode) {
+  const countryName = getCountryName(countryCode) || countryCode;
+  const flag = getCountryFlag(countryCode);
+  return [
+    `I see your WhatsApp number looks like ${countryName}${flag ? ` ${flag}` : ""}.`,
+    `Should we ship to ${countryName}?`,
+    "",
+    `✅ Yes, ${countryName}`,
+    "↔️ No, another country (please tell me which)"
+  ].join("\n");
+}
+
+function currentPromptForStep(session, step) {
+  if (step === "country_confirm") {
+    return buildCountryConfirmationPrompt(session.inferredCountry);
+  }
+  return prompts[step] || productQuestion;
+}
+
 function validationMessage(step, text) {
   if (text) return "";
   if (step === "product") return "Please tell us the product you are looking for.";
@@ -103,6 +136,10 @@ function validateStepAnswer(step, text) {
   }
   if (step === "quantity" && !isValidQuantityAnswer(text)) {
     return "Please tell us the quantity you need, for example: 1000 pcs.";
+  }
+  if (step === "country_confirm") {
+    if (isYesAnswer(text) || isNoAnswer(text) || isMeaningfulAddressAnswer(text)) return "";
+    return "Please reply Yes, or tell us the correct destination country.";
   }
   if (step === "address" && !isMeaningfulAddressAnswer(text)) {
     return "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
@@ -142,16 +179,17 @@ function buildSummary(data) {
   ].filter((line) => line !== "").join("\n");
 }
 
-function buildAttachmentReply(step, attachmentType) {
+function buildAttachmentReply(session, step, attachmentType) {
   const label = attachmentType === "video" ? "video" : "photo";
-  return `Your ${label} has been received. You can continue sending attachments.\n\n${prompts[step]}`;
+  return `Your ${label} has been received. You can continue sending attachments.\n\n${currentPromptForStep(session, step)}`;
 }
 
-export function startConversation(profileName = "") {
+export function startConversation(profileName = "", customerId = "") {
   return {
     session: {
       step: "product",
       profileName,
+      customerId,
       data: {
         imageLinks: [],
         videoLinks: [],
@@ -164,11 +202,34 @@ export function startConversation(profileName = "") {
   };
 }
 
-export function handleCustomerMessage(session, messageText, profileName = "") {
+function buildNextAddressStep(session, profileName, customerId) {
+  const inferredCountry = inferCountryFromPhone(customerId || session.customerId || "");
+  if (inferredCountry) {
+    return {
+      ...session,
+      profileName: session.profileName || profileName,
+      customerId: session.customerId || customerId,
+      step: "country_confirm",
+      attachmentPromptedStep: "",
+      inferredCountry
+    };
+  }
+
+  return {
+    ...session,
+    profileName: session.profileName || profileName,
+    customerId: session.customerId || customerId,
+    step: "address",
+    attachmentPromptedStep: "",
+    inferredCountry: ""
+  };
+}
+
+export function handleCustomerMessage(session, messageText, profileName = "", customerId = "") {
   const text = normalizeText(messageText);
 
   if (!session || isRestart(text)) {
-    return startConversation(profileName);
+    return startConversation(profileName, customerId);
   }
 
   if (session.step === "complete") {
@@ -186,7 +247,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     return {
       session,
       replies: [
-        `I am Lipack's automated assistant, here to collect your inquiry details quickly. Our sales team will review your request and follow up with you soon.\n\n${prompts[step]}`
+        `I am Lipack's automated assistant, here to collect your inquiry details quickly. Our sales team will review your request and follow up with you soon.\n\n${currentPromptForStep(session, step)}`
       ],
       complete: false
     };
@@ -203,7 +264,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
             }
           }
         : session,
-      replies: [`${websiteReply}\n\n${prompts[step]}`],
+      replies: [`${websiteReply}\n\n${currentPromptForStep(session, step)}`],
       complete: false
     };
   }
@@ -211,7 +272,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   if (isLocationQuestion(text)) {
     return {
       session,
-      replies: [`${companyAddress}\n\n${prompts[step]}`],
+      replies: [`${companyAddress}\n\n${currentPromptForStep(session, step)}`],
       complete: false
     };
   }
@@ -219,7 +280,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   if (isSampleQuestion(text)) {
     return {
       session,
-      replies: [`${moqReply}\n\n${prompts[step]}`],
+      replies: [`${moqReply}\n\n${currentPromptForStep(session, step)}`],
       complete: false
     };
   }
@@ -227,7 +288,7 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
   if (isCustomQuestion(text)) {
     return {
       session,
-      replies: [`${customReply}\n\n${prompts[step]}`],
+      replies: [`${customReply}\n\n${currentPromptForStep(session, step)}`],
       complete: false
     };
   }
@@ -249,9 +310,73 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     };
   }
 
+  if (step === "country_confirm") {
+    if (isYesAnswer(text)) {
+      const countryName = getCountryName(session.inferredCountry) || "";
+      const completed = {
+        ...session,
+        profileName: session.profileName || profileName,
+        customerId: session.customerId || customerId,
+        step: "complete",
+        completedAt: new Date().toISOString(),
+        data: {
+          ...session.data,
+          customerLinks,
+          address: countryName
+        }
+      };
+
+      return {
+        session: completed,
+        replies: [buildSummary(completed.data)],
+        complete: true,
+        inquiry: completed.data
+      };
+    }
+
+    if (isNoAnswer(text)) {
+      return {
+        session: {
+          ...session,
+          profileName: session.profileName || profileName,
+          customerId: session.customerId || customerId,
+          step: "address",
+          attachmentPromptedStep: "",
+          data: {
+            ...session.data,
+            customerLinks
+          }
+        },
+        replies: [prompts.address],
+        complete: false
+      };
+    }
+
+    const completed = {
+      ...session,
+      profileName: session.profileName || profileName,
+      customerId: session.customerId || customerId,
+      step: "complete",
+      completedAt: new Date().toISOString(),
+      data: {
+        ...session.data,
+        customerLinks,
+        address: text
+      }
+    };
+
+    return {
+      session: completed,
+      replies: [buildSummary(completed.data)],
+      complete: true,
+      inquiry: completed.data
+    };
+  }
+
   const updated = {
     ...session,
     profileName: session.profileName || profileName,
+    customerId: session.customerId || customerId,
     data: {
       ...session.data,
       customerLinks,
@@ -299,23 +424,34 @@ export function handleCustomerMessage(session, messageText, profileName = "") {
     };
   }
 
+  if (upcoming === "country_confirm") {
+    const nextSession = buildNextAddressStep(updated, profileName, customerId);
+    return {
+      session: nextSession,
+      replies: [nextSession.step === "country_confirm" ? buildCountryConfirmationPrompt(nextSession.inferredCountry) : prompts.address],
+      complete: false
+    };
+  }
+
   return {
     session: {
       ...updated,
       step: upcoming,
-      attachmentPromptedStep: ""
+      attachmentPromptedStep: "",
+      attachmentPromptedAt: ""
     },
     replies: [prompts[upcoming]],
     complete: false
   };
 }
 
-export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "") {
-  const activeSession = session || startConversation(profileName).session;
+export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "", customerId = "") {
+  const activeSession = session || startConversation(profileName, customerId).session;
   const key = attachmentType === "video" ? "videoLinks" : "imageLinks";
   const updated = {
     ...activeSession,
     profileName: activeSession.profileName || profileName,
+    customerId: activeSession.customerId || customerId,
     data: {
       ...activeSession.data,
       [key]: mergeUnique(activeSession.data?.[key], [attachmentLink])
@@ -341,19 +477,20 @@ export function handleCustomerAttachment(session, attachmentType, attachmentLink
   return {
     session: {
       ...updated,
-      attachmentPromptedStep: updated.step
+      attachmentPromptedStep: updated.step,
+      attachmentPromptedAt: new Date().toISOString()
     },
-    replies: [buildAttachmentReply(updated.step, attachmentType)],
+    replies: [buildAttachmentReply(updated, updated.step, attachmentType)],
     complete: false
   };
 }
 
-export function handleCustomerImage(session, imageLink, profileName = "") {
-  return handleCustomerAttachment(session, "image", imageLink, profileName);
+export function handleCustomerImage(session, imageLink, profileName = "", customerId = "") {
+  return handleCustomerAttachment(session, "image", imageLink, profileName, customerId);
 }
 
-export function handleCustomerVideo(session, videoLink, profileName = "") {
-  return handleCustomerAttachment(session, "video", videoLink, profileName);
+export function handleCustomerVideo(session, videoLink, profileName = "", customerId = "") {
+  return handleCustomerAttachment(session, "video", videoLink, profileName, customerId);
 }
 
 export function formatInquiryForLog(inquiry) {

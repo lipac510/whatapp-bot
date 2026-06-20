@@ -108,12 +108,12 @@ function buildMediaUrl(request, mediaId) {
 
 function handleParsedMessage(request, session, message) {
   if (message.type === "image" && message.mediaId) {
-    return handleCustomerImage(session, buildMediaUrl(request, message.mediaId), message.profileName);
+    return handleCustomerImage(session, buildMediaUrl(request, message.mediaId), message.profileName, message.from);
   }
   if (message.type === "video" && message.mediaId) {
-    return handleCustomerVideo(session, buildMediaUrl(request, message.mediaId), message.profileName);
+    return handleCustomerVideo(session, buildMediaUrl(request, message.mediaId), message.profileName, message.from);
   }
-  return handleCustomerMessage(session, message.text, message.profileName);
+  return handleCustomerMessage(session, message.text, message.profileName, message.from);
 }
 
 function shouldRejectInquiry(inquiry) {
@@ -262,6 +262,7 @@ async function handleWebhookPost(request, response) {
 
   const body = rawBody ? JSON.parse(rawBody) : {};
   const messages = extractIncomingMessages(body);
+  const sessionCache = new Map();
 
   for (const message of messages) {
     try {
@@ -343,10 +344,13 @@ async function handleWebhookPost(request, response) {
         continue;
       }
 
-      const session = await getSession(message.from);
+      const session = sessionCache.has(message.from)
+        ? sessionCache.get(message.from)
+        : await getSession(message.from);
       const result = handleParsedMessage(request, session, message);
 
       await saveSession(message.from, result.session);
+      sessionCache.set(message.from, result.session);
       await markMessageProcessed(message.id);
 
       if (result.complete) {
@@ -370,6 +374,7 @@ async function handleWebhookPost(request, response) {
           };
 
           await saveSession(message.from, repairedSession);
+          sessionCache.set(message.from, repairedSession);
           await saveFailure({
             messageId: message.id,
             customerId: message.from,
@@ -399,6 +404,7 @@ async function handleWebhookPost(request, response) {
             address: inquiry.address
           });
           await clearSession(message.from);
+          sessionCache.delete(message.from);
           await sendAndLogText(message.from, noShippingAgentReply, { category: "restricted_country" });
           await saveFailure({
             messageId: message.id,
@@ -437,6 +443,7 @@ async function handleWebhookPost(request, response) {
               messageId: message.id
             });
             await clearSession(message.from);
+            sessionCache.delete(message.from);
           } else {
             await saveInquiry(inquiry);
             await saveSystemEvent(message.from, "Inquiry saved", "inquiry_saved", {
@@ -458,6 +465,7 @@ async function handleWebhookPost(request, response) {
               messageId: message.id
             });
             await clearSession(message.from);
+            sessionCache.delete(message.from);
           }
 
           for (const reply of result.replies) {
@@ -468,6 +476,7 @@ async function handleWebhookPost(request, response) {
           if (isExistingCustomerError(okkiError.message)) {
             await markKnownCustomer(message.from, "okki_existing");
             await clearSession(message.from);
+            sessionCache.delete(message.from);
             await sendEmmaReplyOnce(message.from, "okki_existing");
           } else if (isRetryableCountryError(okkiError.message)) {
             const repairedSession = {
@@ -480,6 +489,7 @@ async function handleWebhookPost(request, response) {
               }
             };
             await saveSession(message.from, repairedSession);
+            sessionCache.set(message.from, repairedSession);
             await sendAndLogText(
               message.from,
               "Please share your country or full shipping address, for example: Qatar or Porto Arabia tower 24, Doha, Qatar.",
@@ -496,6 +506,7 @@ async function handleWebhookPost(request, response) {
             await markKnownCustomer(message.from, "inquiry_completed");
             await markHandoffWindow(message.from);
             await clearSession(message.from);
+            sessionCache.delete(message.from);
             for (const reply of result.replies) {
               await sendAndLogText(message.from, reply, { category: "conversation_reply" });
             }

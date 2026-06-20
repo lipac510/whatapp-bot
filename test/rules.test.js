@@ -30,7 +30,7 @@ test("parses quantities", () => {
   assert.equal(parseQuantity("5,000 pcs"), 5000);
   assert.equal(parseQuantity("20k"), 20000);
   assert.equal(isHighValueQuantity("5000 pcs"), true);
-  assert.equal(normalizeQuantityAnswer("1000 paper bag"), "1000");
+  assert.equal(normalizeQuantityAnswer("1000 paper bag"), "");
   assert.equal(normalizeQuantityAnswer("2k"), "2000 pcs");
 });
 
@@ -76,6 +76,11 @@ test("resolves country from address text or WhatsApp phone", () => {
   assert.equal(canResolveInquiryCountry({
     customerId: "97451111111",
     address: "Porto Arabia tower 24"
+  }), true);
+
+  assert.equal(canResolveInquiryCountry({
+    customerId: "9647701234567",
+    address: "Karbala"
   }), true);
 
   assert.equal(canResolveInquiryCountry({

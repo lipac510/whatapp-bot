@@ -37,6 +37,34 @@ test("collects product, quantity, and address", () => {
   assert.match(result.replies[0], /👉 Working hours:Monday-Friday, 9:00-18:00,China time\./);
 });
 
+test("confirms shipping country from WhatsApp number before asking open address", () => {
+  let result = startConversation("Alice", "97451111111");
+  result = handleCustomerMessage(result.session, "1", "Alice", "97451111111");
+  assert.equal(result.session.step, "quantity");
+
+  result = handleCustomerMessage(result.session, "1000 pcs", "Alice", "97451111111");
+  assert.equal(result.session.step, "country_confirm");
+  assert.match(result.replies[0], /Should we ship to Qatar/i);
+
+  result = handleCustomerMessage(result.session, "Yes", "Alice", "97451111111");
+  assert.equal(result.complete, true);
+  assert.equal(result.inquiry.address, "Qatar");
+});
+
+test("falls back to manual address when customer rejects phone-based country guess", () => {
+  let result = startConversation("Alice", "97451111111");
+  result = handleCustomerMessage(result.session, "2", "Alice", "97451111111");
+  result = handleCustomerMessage(result.session, "1000 pcs", "Alice", "97451111111");
+  result = handleCustomerMessage(result.session, "No", "Alice", "97451111111");
+
+  assert.equal(result.session.step, "address");
+  assert.match(result.replies[0], /Which country should we ship to/i);
+
+  result = handleCustomerMessage(result.session, "Dubai, UAE", "Alice", "97451111111");
+  assert.equal(result.complete, true);
+  assert.equal(result.inquiry.address, "Dubai, UAE");
+});
+
 test("answers bot questions without advancing", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "Are you a bot?", "Alice");
@@ -95,6 +123,15 @@ test("rejects invalid quantity answers", () => {
 
   assert.equal(result.session.step, "quantity");
   assert.equal(result.complete, false);
+  assert.match(result.replies[0], /quantity you need, for example: 1000 pcs/i);
+});
+
+test("rejects mixed product text in quantity step", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "1", "Alice");
+  result = handleCustomerMessage(result.session, "1000 paper bag", "Alice");
+
+  assert.equal(result.session.step, "quantity");
   assert.match(result.replies[0], /quantity you need, for example: 1000 pcs/i);
 });
 

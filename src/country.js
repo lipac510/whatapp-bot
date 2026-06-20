@@ -1,6 +1,15 @@
-const phoneCountryPrefixes = [
+let parsePhoneNumberFromString;
+
+try {
+  ({ parsePhoneNumberFromString } = await import("libphonenumber-js/max"));
+} catch {
+  parsePhoneNumberFromString = null;
+}
+
+const fallbackPhoneCountryPrefixes = [
   ["971", "AE"],
   ["966", "SA"],
+  ["964", "IQ"],
   ["86", "CN"],
   ["44", "GB"],
   ["81", "JP"],
@@ -43,9 +52,57 @@ const phoneCountryPrefixes = [
   ["1", "US"]
 ];
 
+const countryNames = {
+  AE: "United Arab Emirates",
+  SA: "Saudi Arabia",
+  IQ: "Iraq",
+  CN: "China",
+  US: "United States",
+  GB: "United Kingdom",
+  DE: "Germany",
+  FR: "France",
+  IT: "Italy",
+  ES: "Spain",
+  CA: "Canada",
+  AU: "Australia",
+  QA: "Qatar",
+  OM: "Oman",
+  JP: "Japan",
+  KR: "South Korea",
+  IN: "India",
+  BD: "Bangladesh",
+  EG: "Egypt",
+  AF: "Afghanistan",
+  LY: "Libya",
+  GT: "Guatemala",
+  VN: "Vietnam",
+  MM: "Myanmar",
+  LA: "Laos",
+  YE: "Yemen",
+  TN: "Tunisia",
+  IR: "Iran",
+  SY: "Syria",
+  JO: "Jordan",
+  KP: "North Korea",
+  PK: "Pakistan",
+  MX: "Mexico",
+  BR: "Brazil",
+  AR: "Argentina",
+  CL: "Chile",
+  CO: "Colombia",
+  PE: "Peru",
+  VE: "Venezuela",
+  ID: "Indonesia",
+  MY: "Malaysia",
+  TH: "Thailand",
+  PH: "Philippines",
+  SG: "Singapore"
+};
+
 const countryKeywords = [
   ["AE", ["uae", "united arab emirates", "dubai", "abu dhabi", "阿联酋", "迪拜"]],
   ["SA", ["saudi", "saudi arabia", "riyadh", "jeddah", "沙特", "沙特阿拉伯"]],
+  ["IQ", ["iraq", "baghdad", "karbala", "erbil", "iraqi", "العراق", "كربلاء", "بغداد", "iraq karbala"]],
   ["CN", ["china", "中国", "mainland china", "guangdong", "shanghai", "beijing", "jiangsu", "zhejiang"]],
   ["US", ["usa", "united states", "america", "美国"]],
   ["GB", ["uk", "united kingdom", "britain", "england", "英国"]],
@@ -109,9 +166,17 @@ export function inferCountryFromText(value) {
 
 export function inferCountryFromPhone(value) {
   const phone = normalizePhoneNumber(value);
-  for (const [prefix, country] of phoneCountryPrefixes) {
+  if (!phone) return "";
+
+  if (parsePhoneNumberFromString) {
+    const parsed = parsePhoneNumberFromString(phone.startsWith("+") ? phone : `+${phone}`);
+    if (parsed?.country) return parsed.country;
+  }
+
+  for (const [prefix, country] of fallbackPhoneCountryPrefixes) {
     if (phone.startsWith(prefix)) return country;
   }
+
   return "";
 }
 
@@ -119,13 +184,44 @@ export function inferCountry({ address, phone }) {
   return inferCountryFromText(address) || inferCountryFromPhone(phone);
 }
 
+export function getCountryName(countryCode) {
+  return countryNames[String(countryCode || "").toUpperCase()] || "";
+}
+
+export function getCountryFlag(countryCode) {
+  const code = String(countryCode || "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "";
+  return [...code].map((char) => String.fromCodePoint(127397 + char.charCodeAt(0))).join("");
+}
+
 export function splitPhone(value) {
   const phone = normalizePhoneNumber(value);
-  const prefix = phoneCountryPrefixes.find(([item]) => phone.startsWith(item))?.[0] || "";
+  if (!phone) {
+    return {
+      telAreaCode: "",
+      localNumber: "",
+      fullNumber: ""
+    };
+  }
+
+  if (parsePhoneNumberFromString) {
+    const parsed = parsePhoneNumberFromString(phone.startsWith("+") ? phone : `+${phone}`);
+    const prefix = parsed?.countryCallingCode || "";
+    const localNumber = parsed?.nationalNumber || (prefix ? phone.slice(prefix.length) : phone);
+
+    return {
+      telAreaCode: prefix,
+      localNumber,
+      fullNumber: phone
+    };
+  }
+
+  const prefix = fallbackPhoneCountryPrefixes.find(([item]) => phone.startsWith(item))?.[0] || "";
+  const localNumber = prefix ? phone.slice(prefix.length) : phone;
 
   return {
     telAreaCode: prefix,
-    localNumber: prefix ? phone.slice(prefix.length) : phone,
+    localNumber,
     fullNumber: phone
   };
 }
