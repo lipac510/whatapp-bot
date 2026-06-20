@@ -125,6 +125,25 @@ export async function sendTextMessage(to, body) {
   return payload;
 }
 
+// Look up an Instagram user's @username (and name) from their scoped id. The webhook only
+// carries the id, so we fetch the username so OKKI can show the customer's @handle — useful
+// for finding the account if the customer typed a wrong WhatsApp number. Best-effort: returns
+// null on any error so the inquiry still completes.
+export async function fetchProfile(igUserId, accountId) {
+  const token = getInstagramToken(accountId);
+  if (!token || !igUserId) return null;
+
+  const url = `https://graph.instagram.com/${config.graphApiVersion}/${igUserId}?fields=username,name`;
+  try {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return null;
+    return { username: payload.username || "", name: payload.name || "" };
+  } catch {
+    return null;
+  }
+}
+
 // Instagram webhook attachments are already-public CDN URLs (no media-id download flow like
 // WhatsApp). They are time-limited, so for durable OKKI records they should later be
 // re-hosted (e.g. to Supabase Storage). For the MVP we record the CDN URL as-is.

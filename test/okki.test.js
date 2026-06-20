@@ -36,10 +36,11 @@ test("builds OKKI customer payload from inquiry", () => {
 
 test("builds OKKI payload from an Instagram inquiry using the collected WhatsApp number", () => {
   const payload = buildOkkiCompanyPayload({
-    customerId: "instagram:17841400000000001",
+    customerId: "instagram:acct:17841400000000001",
     channel: "instagram",
     whatsapp: "8618014856231",
-    displayName: "iguser",
+    displayName: "@iguser",
+    instagramUsername: "@iguser",
     product: "Paper Bag",
     quantity: "5000",
     address: "Dubai, UAE"
@@ -51,7 +52,9 @@ test("builds OKKI payload from an Instagram inquiry using the collected WhatsApp
   assert.equal(payload.tel_area_code, "86");
   assert.equal(payload.tel, "18014856231");
   assert.equal(payload.customers[0].whatsapp, "8618014856231");
-  assert.equal(payload.customers[0].name, "iguser");
+  // The Instagram @handle is the contact name and appears in the remark so the account is findable.
+  assert.equal(payload.customers[0].name, "@iguser");
+  assert.match(payload.remark, /@iguser/);
 });
 
 test("uses WhatsApp number as fallback contact name", () => {

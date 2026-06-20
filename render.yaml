@@ -48,6 +48,8 @@ services:
         sync: false
       - key: OKKI_ORIGIN_ID
         sync: false
+      - key: OKKI_IG_ORIGIN_ID
+        sync: false
       - key: OKKI_OWNER_USER_ID
         sync: false
       - key: OKKI_INQUIRY_SUMMARY_FIELD_ID

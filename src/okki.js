@@ -13,11 +13,20 @@ function cleanObject(value) {
   );
 }
 
-function parseOriginList() {
-  return String(config.okkiOriginId || "")
+function parseOriginList(raw) {
+  return String(raw || "")
     .split(",")
     .map((item) => Number(item.trim()))
     .filter((item) => Number.isFinite(item) && item > 0);
+}
+
+// Customer source (OKKI origin_list): Instagram inquiries use OKKI_IG_ORIGIN_ID ("INS"),
+// everything else uses OKKI_ORIGIN_ID ("TK"). Falls back to the default if IG id is unset.
+function originRawForInquiry(inquiry) {
+  if (inquiry.channel === "instagram" && config.okkiIgOriginId) {
+    return config.okkiIgOriginId;
+  }
+  return config.okkiOriginId;
 }
 
 function setConfiguredField(target, fieldId, value) {
@@ -40,6 +49,7 @@ function buildDetailedInquirySummary(inquiry) {
   return (
     inquiry.summaryOverride ||
     [
+      inquiry.instagramUsername ? `Instagram：${inquiry.instagramUsername}` : "",
       `询盘产品：${inquiry.product || ""}`,
       `采购数量：${inquiry.quantity || ""}`,
       `发货地址：${inquiry.address || "not provided yet"}`,
@@ -60,6 +70,7 @@ function buildCompactInquirySummary(inquiry) {
   }
 
   const summary = joinSummaryParts([
+    inquiry.instagramUsername || "",
     inquiry.product || "",
     inquiry.quantity || "",
     inquiry.address ? truncateText(inquiry.address, 80) : "",
@@ -116,7 +127,7 @@ export function buildOkkiCompanyPayload(inquiry) {
   });
   const isOfficialNotice = Boolean(inquiry.officialNotice);
   const companyName = inquiry.companyName || phone.fullNumber;
-  const originList = parseOriginList();
+  const originList = parseOriginList(originRawForInquiry(inquiry));
   const userId = Number(config.okkiOwnerUserId || 0);
 
   const inquirySummary = buildDetailedInquirySummary(inquiry);

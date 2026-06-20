@@ -64,6 +64,7 @@ export const config = {
   okkiClientSecret: process.env.OKKI_CLIENT_SECRET || "",
   okkiScope: process.env.OKKI_SCOPE || "company",
   okkiOriginId: process.env.OKKI_ORIGIN_ID || "",
+  okkiIgOriginId: process.env.OKKI_IG_ORIGIN_ID || "",
   okkiOwnerUserId: process.env.OKKI_OWNER_USER_ID || "",
   okkiInquirySummaryFieldId: process.env.OKKI_INQUIRY_SUMMARY_FIELD_ID || "",
   okkiPurchaseQuantityFieldId: process.env.OKKI_PURCHASE_QUANTITY_FIELD_ID || "",

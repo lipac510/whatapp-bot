@@ -388,23 +388,31 @@ async function handleWebhookPost(request, response, channel) {
       await markMessageProcessed(message.id);
 
       if (result.complete) {
+        // Resolve the customer's Instagram @handle (the webhook only carries the id) so OKKI
+        // can show it — handy for locating the account if the typed WhatsApp number is wrong.
+        let igUsername = "";
+        if (channel.name === "instagram") {
+          const profile = await instagram.fetchProfile(message.igUserId, message.igAccountId);
+          igUsername = profile?.username ? `@${profile.username}` : "";
+        }
+
         const inquiry = {
           customerId: message.from,
           channel: channel.name,
           profileName: result.session.profileName,
           ...result.inquiry,
           // contact number: WhatsApp channel = the sender id itself; Instagram = the number
-          // collected in the final step (result.inquiry.whatsapp).
+          // collected in the conversation (result.inquiry.whatsapp).
           whatsapp:
             channel.name === "whatsapp"
               ? message.from
               : result.inquiry.whatsapp || "",
-          displayName: result.session.profileName || message.username || "",
+          displayName: result.session.profileName || igUsername || "",
           ...(channel.name === "instagram"
             ? {
                 sourcePlatform: "Instagram",
                 instagramUserId: message.igUserId || "",
-                instagramUsername: message.username || "",
+                instagramUsername: igUsername,
                 instagramAccountId: message.igAccountId || ""
               }
             : {})
