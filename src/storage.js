@@ -11,6 +11,7 @@ const messageEventsPath = path.join(config.dataDir, "message-events.json");
 const knownCustomersPath = path.join(config.dataDir, "known-customers.json");
 const handoffWindowsPath = path.join(config.dataDir, "handoff-windows.json");
 const emmaRepliesPath = path.join(config.dataDir, "emma-replies.json");
+const igTokensPath = path.join(config.dataDir, "ig-tokens.json");
 
 const storageLimits = {
   failures: 1000,
@@ -624,6 +625,50 @@ export async function listEmmaReplies() {
         sentAt: row.sent_at
       }
     ])
+  );
+}
+
+// Durable storage for refreshed Instagram access tokens (survives restarts via Supabase).
+// Keyed by account key ("_default" for the IG_ACCESS_TOKEN fallback, or the IG account id).
+export async function listIgTokens() {
+  if (!isSupabaseEnabled()) {
+    return readJson(igTokensPath, {});
+  }
+
+  return withSupabaseFallback(
+    "Supabase ig_tokens GET failed",
+    async () => readJson(igTokensPath, {}),
+    async () => {
+      const rows = await supabaseSelect("ig_tokens", {
+        select: "account_key,payload,updated_at",
+        limit: "1000"
+      });
+      return Object.fromEntries(rows.map((row) => [row.account_key, rowToStoredPayload(row)]));
+    }
+  );
+}
+
+export async function saveIgToken(accountKey, payload) {
+  const next = { ...payload, updatedAt: new Date().toISOString() };
+
+  return withSupabaseFallback(
+    "Supabase ig_tokens UPSERT failed",
+    async () => {
+      const tokens = await readJson(igTokensPath, {});
+      tokens[accountKey] = next;
+      await writeJson(igTokensPath, tokens);
+    },
+    async () => {
+      await supabaseUpsert(
+        "ig_tokens",
+        {
+          account_key: accountKey,
+          payload: next,
+          updated_at: next.updatedAt
+        },
+        "account_key"
+      );
+    }
   );
 }
 

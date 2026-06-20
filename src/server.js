@@ -50,6 +50,12 @@ import {
 } from "./rules.js";
 import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp.js";
 import * as instagram from "./instagram.js";
+import {
+  initIgTokens,
+  maybeRefreshTokens,
+  startTokenScheduler,
+  tokenSnapshot
+} from "./igTokens.js";
 import { renderPrivacyPage, renderDataDeletionPage } from "./legal.js";
 
 // A channel adapter lets one inquiry pipeline serve both WhatsApp and Instagram.
@@ -292,6 +298,10 @@ async function handleWebhookPost(request, response, channel) {
     sendJson(response, 403, { error: "Invalid webhook signature" });
     return;
   }
+
+  // Opportunistic, throttled token refresh so a sleepy free-tier instance still keeps its
+  // Instagram tokens fresh whenever it receives traffic.
+  if (channel.name === "instagram") maybeRefreshTokens();
 
   const body = rawBody ? JSON.parse(rawBody) : {};
   const messages = channel.extract(body);
@@ -674,6 +684,12 @@ async function handleRequest(request, response) {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/ig-tokens") {
+      // Non-sensitive: shows per-account expiry/refresh status, never the token value.
+      sendJson(response, 200, { accounts: tokenSnapshot() });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/conversations") {
       if (!requireAdmin(request, response)) return;
       const payload = {
@@ -766,6 +782,8 @@ server.on("error", (error) => {
   throw error;
 });
 
-server.listen(config.port, config.host, () => {
+server.listen(config.port, config.host, async () => {
   console.log(`WhatsApp bot listening on http://${config.host}:${config.port}`);
+  await initIgTokens().catch((error) => console.warn(`Instagram token init failed: ${error.message}`));
+  startTokenScheduler();
 });

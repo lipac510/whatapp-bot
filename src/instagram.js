@@ -1,4 +1,5 @@
-import { config, getInstagramToken } from "./config.js";
+import { config } from "./config.js";
+import { getToken as getInstagramToken } from "./igTokens.js";
 
 const ROUTING_PREFIX = "instagram:";
 
