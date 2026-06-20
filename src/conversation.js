@@ -13,12 +13,13 @@ import {
   normalizeWhatsAppAnswer
 } from "./rules.js";
 
-// WhatsApp already knows the customer's number, so it confirms the country from the
-// phone prefix. Instagram has no phone, so it skips country_confirm and instead collects
-// the WhatsApp number as the final step (needed for OKKI identity + sales follow-up).
+// WhatsApp already knows the customer's number (the sender id), so it confirms the country
+// straight from the phone prefix. Instagram has no phone, so it first COLLECTS the WhatsApp
+// number, then runs the same country_confirm using that collected number, and only asks for
+// a free-form address if the customer rejects the inferred country.
 const stepsByChannel = {
   whatsapp: ["product", "quantity", "country_confirm", "address"],
-  instagram: ["product", "quantity", "address", "whatsapp"]
+  instagram: ["product", "quantity", "whatsapp", "country_confirm", "address"]
 };
 
 function stepsForChannel(channel) {
@@ -27,6 +28,13 @@ function stepsForChannel(channel) {
 
 function channelOf(session) {
   return (session && session.channel) || "whatsapp";
+}
+
+// Phone number used to infer the shipping country: WhatsApp uses the sender id, Instagram
+// uses the WhatsApp number the customer just provided in the conversation.
+function phoneForCountry(session, customerId) {
+  if (channelOf(session) === "instagram") return session?.data?.whatsapp || "";
+  return customerId || session?.customerId || "";
 }
 
 const minimumFastTrackQuantity = 5000;
@@ -228,7 +236,7 @@ export function startConversation(profileName = "", customerId = "", channel = "
 }
 
 function buildNextAddressStep(session, profileName, customerId) {
-  const inferredCountry = inferCountryFromPhone(customerId || session.customerId || "");
+  const inferredCountry = inferCountryFromPhone(phoneForCountry(session, customerId));
   if (inferredCountry) {
     return {
       ...session,
@@ -356,7 +364,7 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
         session: completed,
         replies: [buildSummary(completed.data)],
         complete: true,
-        inquiry: completed.data
+        inquiry: completed.fastTrack ? { ...completed.data, fastTrack: true } : completed.data
       };
     }
 
@@ -395,7 +403,7 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
       session: completed,
       replies: [buildSummary(completed.data)],
       complete: true,
-      inquiry: completed.data
+      inquiry: completed.fastTrack ? { ...completed.data, fastTrack: true } : completed.data
     };
   }
 

@@ -65,43 +65,56 @@ test("falls back to manual address when customer rejects phone-based country gue
   assert.equal(result.inquiry.address, "Dubai, UAE");
 });
 
-test("instagram flow collects product, quantity, address, then WhatsApp", () => {
-  let result = startConversation("", "instagram:ig-1", "instagram");
+test("instagram flow collects product, quantity, WhatsApp, then confirms country from it", () => {
+  let result = startConversation("", "instagram:acct:ig-1", "instagram");
   assert.equal(result.session.step, "product");
   assert.equal(result.session.channel, "instagram");
 
-  result = handleCustomerMessage(result.session, "1", "", "instagram:ig-1");
+  result = handleCustomerMessage(result.session, "1", "", "instagram:acct:ig-1");
   assert.equal(result.session.step, "quantity");
 
-  // High-value quantity must NOT short-circuit on Instagram (no number yet).
-  result = handleCustomerMessage(result.session, "5000", "", "instagram:ig-1");
-  assert.equal(result.session.step, "address");
-  assert.equal(result.complete, false);
-
-  result = handleCustomerMessage(result.session, "Dubai, UAE", "", "instagram:ig-1");
+  // High-value quantity must NOT short-circuit on Instagram (number not collected yet).
+  result = handleCustomerMessage(result.session, "5000", "", "instagram:acct:ig-1");
   assert.equal(result.session.step, "whatsapp");
   assert.match(result.replies[0], /WhatsApp number/i);
 
-  result = handleCustomerMessage(result.session, "+1 718 555 1234", "", "instagram:ig-1");
+  // WhatsApp number drives the country guess (971 -> United Arab Emirates).
+  result = handleCustomerMessage(result.session, "+971 50 123 4567", "", "instagram:acct:ig-1");
+  assert.equal(result.session.step, "country_confirm");
+  assert.match(result.replies[0], /I see your WhatsApp number looks like United Arab Emirates/i);
+  assert.match(result.replies[0], /Should we ship to United Arab Emirates/i);
+
+  result = handleCustomerMessage(result.session, "Yes", "", "instagram:acct:ig-1");
   assert.equal(result.complete, true);
   assert.equal(result.inquiry.product, "Corrugated Box");
   assert.equal(result.inquiry.quantity, "5000");
-  assert.equal(result.inquiry.address, "Dubai, UAE");
-  assert.equal(result.inquiry.whatsapp, "17185551234");
+  assert.equal(result.inquiry.whatsapp, "971501234567");
+  assert.equal(result.inquiry.address, "United Arab Emirates");
   assert.equal(result.inquiry.fastTrack, true);
 });
 
-test("instagram flow rejects an invalid WhatsApp number", () => {
-  let result = startConversation("", "instagram:ig-2", "instagram");
-  result = handleCustomerMessage(result.session, "2", "", "instagram:ig-2");
-  result = handleCustomerMessage(result.session, "1000 pcs", "", "instagram:ig-2");
-  result = handleCustomerMessage(result.session, "Canada", "", "instagram:ig-2");
+test("instagram flow falls back to manual address when country guess is rejected", () => {
+  let result = startConversation("", "instagram:acct:ig-2", "instagram");
+  result = handleCustomerMessage(result.session, "2", "", "instagram:acct:ig-2");
+  result = handleCustomerMessage(result.session, "1000 pcs", "", "instagram:acct:ig-2");
   assert.equal(result.session.step, "whatsapp");
 
-  result = handleCustomerMessage(result.session, "hello", "", "instagram:ig-2");
+  // Invalid number is rejected and keeps asking.
+  result = handleCustomerMessage(result.session, "hello", "", "instagram:acct:ig-2");
   assert.equal(result.session.step, "whatsapp");
-  assert.equal(result.complete, false);
   assert.match(result.replies[0], /valid WhatsApp number/i);
+
+  result = handleCustomerMessage(result.session, "+971501234567", "", "instagram:acct:ig-2");
+  assert.equal(result.session.step, "country_confirm");
+
+  result = handleCustomerMessage(result.session, "No", "", "instagram:acct:ig-2");
+  assert.equal(result.session.step, "address");
+  assert.match(result.replies[0], /Which country should we ship to/i);
+
+  result = handleCustomerMessage(result.session, "Canada", "", "instagram:acct:ig-2");
+  assert.equal(result.complete, true);
+  assert.equal(result.inquiry.whatsapp, "971501234567");
+  assert.equal(result.inquiry.address, "Canada");
 });
 
 test("answers bot questions without advancing", () => {
