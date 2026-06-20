@@ -91,9 +91,17 @@ export function buildAdminModel({
       knownCustomers
     });
 
+    const channel =
+      latestInquiry.channel ||
+      lastMessage.channel ||
+      session?.channel ||
+      (String(customerId).startsWith("instagram:") ? "instagram" : "whatsapp");
+
     return {
       customerId,
       profileName,
+      channel,
+      source: channel === "instagram" ? "Instagram" : "WhatsApp",
       status,
       messageCount: customerMessages.length,
       inquiryCount: customerInquiries.length,
@@ -126,6 +134,7 @@ export function buildAdminModel({
         [
           item.customerId,
           item.profileName,
+          item.source,
           item.status,
           item.product,
           item.quantity,
@@ -164,6 +173,7 @@ export function renderAdminCsv(model = {}) {
       "No.",
       "Customer ID",
       "Profile Name",
+      "Source",
       "Status",
       "Product",
       "Quantity",
@@ -181,6 +191,7 @@ export function renderAdminCsv(model = {}) {
         index + 1,
         item.customerId,
         item.profileName,
+        item.source,
         item.status,
         item.product,
         item.quantity,
@@ -264,7 +275,7 @@ export function renderAdminPage({
     return `
       <tr class="${active}">
         <td>${index + 1}</td>
-        <td><a href="${href}">${escapeHtml(item.customerId)}</a><br><small>${escapeHtml(item.profileName)}</small></td>
+        <td><a href="${href}">${escapeHtml(item.customerId)}</a><br><small>${escapeHtml(item.profileName)}</small><br><small class="source ${escapeHtml(item.channel)}">${escapeHtml(item.source)}</small></td>
         <td>${renderBadge(item.status)}<br><small>${escapeHtml(item.knownReason)}</small></td>
         <td>${escapeHtml(item.product)}<br><small>${escapeHtml(item.quantity)} · ${escapeHtml(item.address)}</small></td>
         <td>${escapeHtml(item.messageCount)}</td>
@@ -308,6 +319,9 @@ export function renderAdminPage({
     .needs-review { background: #fee2e2; color: #991b1b; }
     .collecting { background: #fef3c7; color: #92400e; }
     .known-customer { background: #e0e7ff; color: #3730a3; }
+    .source { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
+    .source.whatsapp { background: #dcfce7; color: #166534; }
+    .source.instagram { background: #fce7f3; color: #9d174e; }
     .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .facts div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 9px; }
     .facts strong { display: block; color: #64748b; font-size: 12px; margin-bottom: 3px; }

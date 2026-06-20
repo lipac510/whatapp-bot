@@ -33,6 +33,8 @@ export const config = {
   accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
   businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+  igPageId: process.env.IG_PAGE_ID || "",
+  igPageAccessToken: process.env.IG_PAGE_ACCESS_TOKEN || "",
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "",
   appSecret: process.env.META_APP_SECRET || "",
   businessName: process.env.BUSINESS_NAME || "Lipack Packaging",
@@ -56,6 +58,24 @@ export function shouldVerifyWebhookSignature() {
   return Boolean(config.appSecret && !config.appSecret.includes("replace_with"));
 }
 
+export function hasWhatsappConfig() {
+  return Boolean(
+    config.accessToken &&
+      !config.accessToken.includes("replace_with") &&
+      config.phoneNumberId &&
+      !config.phoneNumberId.includes("replace_with")
+  );
+}
+
+export function hasInstagramConfig() {
+  return Boolean(
+    config.igPageId &&
+      !config.igPageId.includes("replace_with") &&
+      config.igPageAccessToken &&
+      !config.igPageAccessToken.includes("replace_with")
+  );
+}
+
 export function hasOkkiConfig() {
   return Boolean(
     config.okkiClientId &&
@@ -77,14 +97,16 @@ export function hasSupabaseConfig() {
 export function validateConfig() {
   const missing = [];
 
-  if (!config.accessToken || config.accessToken.includes("replace_with")) {
-    missing.push("WHATSAPP_ACCESS_TOKEN");
-  }
-  if (!config.phoneNumberId || config.phoneNumberId.includes("replace_with")) {
-    missing.push("WHATSAPP_PHONE_NUMBER_ID");
-  }
   if (!config.webhookVerifyToken || config.webhookVerifyToken.includes("replace_with")) {
     missing.push("WEBHOOK_VERIFY_TOKEN");
+  }
+
+  // At least one channel must be fully configured. WhatsApp-only deployments stay valid;
+  // an Instagram-only deployment is also allowed.
+  if (!hasWhatsappConfig() && !hasInstagramConfig()) {
+    missing.push(
+      "WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID (or IG_PAGE_ID + IG_PAGE_ACCESS_TOKEN)"
+    );
   }
 
   return missing;

@@ -105,10 +105,14 @@ async function getOkkiAccessToken() {
 }
 
 export function buildOkkiCompanyPayload(inquiry) {
-  const phone = splitPhone(inquiry.customerId);
+  // Routing id (inquiry.customerId) may be channel-prefixed (e.g. "instagram:<igsid>"),
+  // so the actual contact number must come from inquiry.whatsapp. WhatsApp-channel
+  // inquiries fall back to customerId, keeping their payload identical to before.
+  const contactNumber = inquiry.whatsapp || inquiry.customerId;
+  const phone = splitPhone(contactNumber);
   const country = inferCountry({
     address: inquiry.address,
-    phone: inquiry.customerId
+    phone: contactNumber
   });
   const isOfficialNotice = Boolean(inquiry.officialNotice);
   const companyName = inquiry.companyName || phone.fullNumber;
@@ -133,7 +137,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     customers: [
       cleanObject({
         customer_id: 0,
-        name: inquiry.profileName || phone.fullNumber,
+        name: inquiry.profileName || inquiry.displayName || phone.fullNumber,
         email: inquiry.email || "",
         tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
         tel: isOfficialNotice ? undefined : phone.localNumber,

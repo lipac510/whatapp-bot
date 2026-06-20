@@ -28,6 +28,10 @@ services:
         sync: false
       - key: WHATSAPP_BUSINESS_ACCOUNT_ID
         sync: false
+      - key: IG_PAGE_ID
+        sync: false
+      - key: IG_PAGE_ACCESS_TOKEN
+        sync: false
       - key: WEBHOOK_VERIFY_TOKEN
         sync: false
       - key: META_APP_SECRET

@@ -7,11 +7,28 @@ import {
   isHighValueQuantity,
   isMeaningfulAddressAnswer,
   isValidQuantityAnswer,
+  isValidWhatsAppAnswer,
   normalizeQuantityAnswer,
-  normalizeProductAnswer
+  normalizeProductAnswer,
+  normalizeWhatsAppAnswer
 } from "./rules.js";
 
-const steps = ["product", "quantity", "country_confirm", "address"];
+// WhatsApp already knows the customer's number, so it confirms the country from the
+// phone prefix. Instagram has no phone, so it skips country_confirm and instead collects
+// the WhatsApp number as the final step (needed for OKKI identity + sales follow-up).
+const stepsByChannel = {
+  whatsapp: ["product", "quantity", "country_confirm", "address"],
+  instagram: ["product", "quantity", "address", "whatsapp"]
+};
+
+function stepsForChannel(channel) {
+  return stepsByChannel[channel] || stepsByChannel.whatsapp;
+}
+
+function channelOf(session) {
+  return (session && session.channel) || "whatsapp";
+}
+
 const minimumFastTrackQuantity = 5000;
 const websiteReply = "Please view our web: www.cnlipack.com for more products.";
 const companyAddress =
@@ -48,14 +65,16 @@ export const handoffReminderMessage = [
 const prompts = {
   product: productQuestion,
   quantity: "Great. What quantity do you need?\nYou can reply like: 1000 pcs.",
-  address: "Which country should we ship to?\nIf possible, please share the full delivery address so we can estimate shipping more accurately."
+  address: "Which country should we ship to?\nIf possible, please share the full delivery address so we can estimate shipping more accurately.",
+  whatsapp: "Almost done! 📲 What's the best WhatsApp number for our specialist to send you the catalog & quote?\nPlease include your country code, e.g. +1, +49."
 };
 
 const labels = {
   product: "采购产品",
   quantity: "采购数量",
   country_confirm: "国家确认",
-  address: "发货地址"
+  address: "发货地址",
+  whatsapp: "WhatsApp"
 };
 
 const urlPattern = /https?:\/\/[^\s<>"'，。；、]+/gi;
@@ -125,6 +144,7 @@ function validationMessage(step, text) {
   if (step === "product") return "Please tell us the product you are looking for.";
   if (step === "quantity") return "Please tell us the quantity you need.";
   if (step === "address") return "Please share your destination country or shipping address.";
+  if (step === "whatsapp") return "Please share your WhatsApp number with country code.";
   return "Please send your answer.";
 }
 
@@ -144,12 +164,16 @@ function validateStepAnswer(step, text) {
   if (step === "address" && !isMeaningfulAddressAnswer(text)) {
     return "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
   }
+  if (step === "whatsapp" && !isValidWhatsAppAnswer(text)) {
+    return "Please share a valid WhatsApp number with country code, for example: +1 7185551234.";
+  }
   return "";
 }
 
-function nextStep(currentStep) {
-  const index = steps.indexOf(currentStep);
-  return steps[index + 1] || null;
+function nextStep(currentStep, channel) {
+  const channelSteps = stepsForChannel(channel);
+  const index = channelSteps.indexOf(currentStep);
+  return channelSteps[index + 1] || null;
 }
 
 function mergeUnique(existing = [], incoming = []) {
@@ -184,10 +208,11 @@ function buildAttachmentReply(session, step, attachmentType) {
   return `Your ${label} has been received. You can continue sending attachments.\n\n${currentPromptForStep(session, step)}`;
 }
 
-export function startConversation(profileName = "", customerId = "") {
+export function startConversation(profileName = "", customerId = "", channel = "whatsapp") {
   return {
     session: {
       step: "product",
+      channel,
       profileName,
       customerId,
       data: {
@@ -225,11 +250,12 @@ function buildNextAddressStep(session, profileName, customerId) {
   };
 }
 
-export function handleCustomerMessage(session, messageText, profileName = "", customerId = "") {
+export function handleCustomerMessage(session, messageText, profileName = "", customerId = "", channelName = "whatsapp") {
   const text = normalizeText(messageText);
+  const channel = channelOf(session) || channelName;
 
   if (!session || isRestart(text)) {
-    return startConversation(profileName, customerId);
+    return startConversation(profileName, customerId, (session && session.channel) || channelName);
   }
 
   if (session.step === "complete") {
@@ -373,23 +399,33 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
     };
   }
 
+  const stepValue =
+    step === "product"
+      ? normalizeProductAnswer(text)
+      : step === "quantity"
+        ? normalizeQuantityAnswer(text)
+        : step === "whatsapp"
+          ? normalizeWhatsAppAnswer(text)
+          : text;
+
+  const highValue = step === "quantity" && isHighValueQuantity(text, minimumFastTrackQuantity);
+
   const updated = {
     ...session,
     profileName: session.profileName || profileName,
     customerId: session.customerId || customerId,
+    ...(highValue ? { fastTrack: true } : {}),
     data: {
       ...session.data,
       customerLinks,
-      [step]:
-        step === "product"
-          ? normalizeProductAnswer(text)
-          : step === "quantity"
-            ? normalizeQuantityAnswer(text)
-            : text
+      [step]: stepValue
     }
   };
 
-  if (step === "quantity" && isHighValueQuantity(text, minimumFastTrackQuantity)) {
+  // WhatsApp already has the contact number, so a high-value order can be recorded right
+  // away. Instagram still needs the address + WhatsApp number, so it keeps collecting and
+  // only carries the fastTrack flag forward to relax later validation.
+  if (highValue && channel === "whatsapp") {
     const completed = {
       ...updated,
       fastTrack: true,
@@ -408,7 +444,7 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
     };
   }
 
-  const upcoming = nextStep(step);
+  const upcoming = nextStep(step, channel);
   if (!upcoming) {
     const completed = {
       ...updated,
@@ -420,7 +456,7 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
       session: completed,
       replies: [buildSummary(completed.data)],
       complete: true,
-      inquiry: completed.data
+      inquiry: completed.fastTrack ? { ...completed.data, fastTrack: true } : completed.data
     };
   }
 
@@ -445,8 +481,8 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
   };
 }
 
-export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "", customerId = "") {
-  const activeSession = session || startConversation(profileName, customerId).session;
+export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "", customerId = "", channelName = "whatsapp") {
+  const activeSession = session || startConversation(profileName, customerId, channelName).session;
   const key = attachmentType === "video" ? "videoLinks" : "imageLinks";
   const updated = {
     ...activeSession,
@@ -485,17 +521,17 @@ export function handleCustomerAttachment(session, attachmentType, attachmentLink
   };
 }
 
-export function handleCustomerImage(session, imageLink, profileName = "", customerId = "") {
-  return handleCustomerAttachment(session, "image", imageLink, profileName, customerId);
+export function handleCustomerImage(session, imageLink, profileName = "", customerId = "", channelName = "whatsapp") {
+  return handleCustomerAttachment(session, "image", imageLink, profileName, customerId, channelName);
 }
 
-export function handleCustomerVideo(session, videoLink, profileName = "", customerId = "") {
-  return handleCustomerAttachment(session, "video", videoLink, profileName, customerId);
+export function handleCustomerVideo(session, videoLink, profileName = "", customerId = "", channelName = "whatsapp") {
+  return handleCustomerAttachment(session, "video", videoLink, profileName, customerId, channelName);
 }
 
 export function formatInquiryForLog(inquiry) {
   return [
-    ...steps.map((step) => `${labels[step]}：${inquiry[step] || ""}`),
+    ...Object.keys(labels).map((step) => `${labels[step]}：${inquiry[step] || ""}`),
     inquiry.imageLinks?.length ? `图片链接：${inquiry.imageLinks.join(" , ")}` : "",
     inquiry.videoLinks?.length ? `视频链接：${inquiry.videoLinks.join(" , ")}` : "",
     inquiry.customerLinks?.length ? `客户链接：${inquiry.customerLinks.join(" , ")}` : ""

@@ -49,6 +49,25 @@ import {
   parseQuantity
 } from "./rules.js";
 import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp.js";
+import * as instagram from "./instagram.js";
+
+// A channel adapter lets one inquiry pipeline serve both WhatsApp and Instagram.
+// WhatsApp keeps its exact previous behaviour; Instagram plugs in its own parser,
+// sender and (already-resolved) media URLs.
+const whatsappChannel = {
+  name: "whatsapp",
+  extract: (body) => extractIncomingMessages(body),
+  sendText: (to, text) => sendTextMessage(to, text),
+  resolveMediaUrl: (request, message) =>
+    message.mediaId ? buildMediaUrl(request, message.mediaId) : ""
+};
+
+const instagramChannel = {
+  name: "instagram",
+  extract: (body) => instagram.extractIncomingMessages(body),
+  sendText: (to, text) => instagram.sendTextMessage(to, text),
+  resolveMediaUrl: (request, message) => instagram.resolveMediaUrl(request, message)
+};
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json" });
@@ -106,20 +125,26 @@ function buildMediaUrl(request, mediaId) {
   return `${getPublicBaseUrl(request)}/media/${encodeURIComponent(mediaId)}`;
 }
 
-function handleParsedMessage(request, session, message) {
-  if (message.type === "image" && message.mediaId) {
-    return handleCustomerImage(session, buildMediaUrl(request, message.mediaId), message.profileName, message.from);
+function handleParsedMessage(channel, request, session, message) {
+  if (message.type === "image") {
+    const mediaUrl = channel.resolveMediaUrl(request, message);
+    if (mediaUrl) {
+      return handleCustomerImage(session, mediaUrl, message.profileName, message.from, channel.name);
+    }
   }
-  if (message.type === "video" && message.mediaId) {
-    return handleCustomerVideo(session, buildMediaUrl(request, message.mediaId), message.profileName, message.from);
+  if (message.type === "video") {
+    const mediaUrl = channel.resolveMediaUrl(request, message);
+    if (mediaUrl) {
+      return handleCustomerVideo(session, mediaUrl, message.profileName, message.from, channel.name);
+    }
   }
-  return handleCustomerMessage(session, message.text, message.profileName, message.from);
+  return handleCustomerMessage(session, message.text, message.profileName, message.from, channel.name);
 }
 
 function shouldRejectInquiry(inquiry) {
   const country = inferCountry({
     address: inquiry.address,
-    phone: inquiry.customerId
+    phone: inquiry.whatsapp || inquiry.customerId
   });
   const quantity = parseQuantity(inquiry.quantity);
   return {
@@ -159,20 +184,20 @@ function isWithinHours(isoDate, hours) {
   return Date.now() - time < hours * 60 * 60 * 1000;
 }
 
-async function sendEmmaReplyOnce(customerId, reason) {
+async function sendEmmaReplyOnce(channel, customerId, reason) {
   if (await wasEmmaReplySent(customerId)) return false;
-  await sendAndLogText(customerId, existingCustomerReply, { category: reason });
+  await sendAndLogText(channel, customerId, existingCustomerReply, { category: reason });
   await markEmmaReplySent(customerId, reason);
   await saveSystemEvent(customerId, "Emma contact sent", reason);
   return true;
 }
 
-async function handleRecentHandoffWindow(customerId) {
+async function handleRecentHandoffWindow(channel, customerId) {
   const handoff = await getHandoffWindow(customerId);
   if (!handoff || !isWithinHours(handoff.completedAt, 6)) return false;
 
   if (!handoff.reminderSent) {
-    await sendAndLogText(customerId, handoffReminderMessage, { category: "handoff_reminder" });
+    await sendAndLogText(channel, customerId, handoffReminderMessage, { category: "handoff_reminder" });
     await markHandoffReminderSent(customerId);
     await saveSystemEvent(customerId, "Handoff reminder sent", "handoff_reminder");
   }
@@ -180,10 +205,11 @@ async function handleRecentHandoffWindow(customerId) {
   return true;
 }
 
-async function sendAndLogText(customerId, text, extra = {}) {
-  await sendTextMessage(customerId, text);
+async function sendAndLogText(channel, customerId, text, extra = {}) {
+  await channel.sendText(customerId, text);
   await saveMessageEvent({
     customerId,
+    channel: channel.name,
     direction: "out",
     type: "text",
     text,
@@ -202,16 +228,17 @@ async function saveSystemEvent(customerId, label, category, extra = {}) {
   });
 }
 
-async function saveInboundMessageEvent(message, request) {
+async function saveInboundMessageEvent(channel, message, request) {
   await saveMessageEvent({
     messageId: message.id,
     customerId: message.from,
+    channel: channel.name,
     profileName: message.profileName,
     direction: "in",
     type: message.type,
     text: message.text || "",
     mediaId: message.mediaId || "",
-    mediaUrl: message.mediaId ? buildMediaUrl(request, message.mediaId) : "",
+    mediaUrl: channel.resolveMediaUrl(request, message),
     category: "customer_message"
   });
 }
@@ -253,7 +280,7 @@ function verifyWebhook(request, response, url) {
   response.end("Forbidden");
 }
 
-async function handleWebhookPost(request, response) {
+async function handleWebhookPost(request, response, channel) {
   const rawBody = await readRequestBody(request);
   if (!isValidWebhookSignature(request, rawBody)) {
     sendJson(response, 403, { error: "Invalid webhook signature" });
@@ -261,7 +288,7 @@ async function handleWebhookPost(request, response) {
   }
 
   const body = rawBody ? JSON.parse(rawBody) : {};
-  const messages = extractIncomingMessages(body);
+  const messages = channel.extract(body);
   const sessionCache = new Map();
 
   for (const message of messages) {
@@ -271,12 +298,14 @@ async function handleWebhookPost(request, response) {
         continue;
       }
 
-      await saveInboundMessageEvent(message, request);
+      await saveInboundMessageEvent(channel, message, request);
 
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
         const noticeTime = new Date().toISOString().replace(/[:.]/g, "-");
         const officialNotice = {
           customerId: message.from,
+          channel: channel.name,
+          whatsapp: channel.name === "whatsapp" ? message.from : "",
           profileName: message.profileName,
           type: "official_code_or_notice",
           officialNotice: true,
@@ -328,18 +357,18 @@ async function handleWebhookPost(request, response) {
       }
 
       if (message.type === "text" && isHumanHandoffRequest(message.text)) {
-        await sendEmmaReplyOnce(message.from, "manual_handoff_requested");
+        await sendEmmaReplyOnce(channel, message.from, "manual_handoff_requested");
         await markMessageProcessed(message.id);
         continue;
       }
 
-      if (await handleRecentHandoffWindow(message.from)) {
+      if (await handleRecentHandoffWindow(channel, message.from)) {
         await markMessageProcessed(message.id);
         continue;
       }
 
       if (await isKnownCustomer(message.from)) {
-        await sendEmmaReplyOnce(message.from, "existing_customer");
+        await sendEmmaReplyOnce(channel, message.from, "existing_customer");
         await markMessageProcessed(message.id);
         continue;
       }
@@ -347,7 +376,7 @@ async function handleWebhookPost(request, response) {
       const session = sessionCache.has(message.from)
         ? sessionCache.get(message.from)
         : await getSession(message.from);
-      const result = handleParsedMessage(request, session, message);
+      const result = handleParsedMessage(channel, request, session, message);
 
       await saveSession(message.from, result.session);
       sessionCache.set(message.from, result.session);
@@ -356,8 +385,23 @@ async function handleWebhookPost(request, response) {
       if (result.complete) {
         const inquiry = {
           customerId: message.from,
+          channel: channel.name,
           profileName: result.session.profileName,
-          ...result.inquiry
+          ...result.inquiry,
+          // contact number: WhatsApp channel = the sender id itself; Instagram = the number
+          // collected in the final step (result.inquiry.whatsapp).
+          whatsapp:
+            channel.name === "whatsapp"
+              ? message.from
+              : result.inquiry.whatsapp || "",
+          displayName: result.session.profileName || message.username || "",
+          ...(channel.name === "instagram"
+            ? {
+                sourcePlatform: "Instagram",
+                instagramUserId: message.igUserId || "",
+                instagramUsername: message.username || ""
+              }
+            : {})
         };
         const inquiryQualityError = getInquiryQualityError(inquiry);
         if (inquiryQualityError) {
@@ -389,7 +433,7 @@ async function handleWebhookPost(request, response) {
           const retryPrompt = fallbackStep === "quantity"
             ? "Please tell us the quantity you need, for example: 1000 pcs."
             : "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
-          await sendAndLogText(message.from, retryPrompt, { category: "conversation_reply" });
+          await sendAndLogText(channel, message.from, retryPrompt, { category: "conversation_reply" });
           continue;
         }
         console.log(`New inquiry from ${message.from}\n${formatInquiryForLog(result.inquiry)}`);
@@ -405,7 +449,7 @@ async function handleWebhookPost(request, response) {
           });
           await clearSession(message.from);
           sessionCache.delete(message.from);
-          await sendAndLogText(message.from, noShippingAgentReply, { category: "restricted_country" });
+          await sendAndLogText(channel, message.from, noShippingAgentReply, { category: "restricted_country" });
           await saveFailure({
             messageId: message.id,
             customerId: message.from,
@@ -469,7 +513,7 @@ async function handleWebhookPost(request, response) {
           }
 
           for (const reply of result.replies) {
-            await sendAndLogText(message.from, reply, { category: "conversation_reply" });
+            await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
           }
         } catch (okkiError) {
           console.error(`Failed to sync OKKI customer for ${message.from}: ${okkiError.message}`);
@@ -477,7 +521,7 @@ async function handleWebhookPost(request, response) {
             await markKnownCustomer(message.from, "okki_existing");
             await clearSession(message.from);
             sessionCache.delete(message.from);
-            await sendEmmaReplyOnce(message.from, "okki_existing");
+            await sendEmmaReplyOnce(channel, message.from, "okki_existing");
           } else if (isRetryableCountryError(okkiError.message)) {
             const repairedSession = {
               ...result.session,
@@ -491,6 +535,7 @@ async function handleWebhookPost(request, response) {
             await saveSession(message.from, repairedSession);
             sessionCache.set(message.from, repairedSession);
             await sendAndLogText(
+              channel,
               message.from,
               "Please share your country or full shipping address, for example: Qatar or Porto Arabia tower 24, Doha, Qatar.",
               { category: "conversation_reply" }
@@ -508,7 +553,7 @@ async function handleWebhookPost(request, response) {
             await clearSession(message.from);
             sessionCache.delete(message.from);
             for (const reply of result.replies) {
-              await sendAndLogText(message.from, reply, { category: "conversation_reply" });
+              await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
             }
           }
           await saveFailure({
@@ -524,7 +569,7 @@ async function handleWebhookPost(request, response) {
         }
       } else {
         for (const reply of result.replies) {
-          await sendAndLogText(message.from, reply, { category: "conversation_reply" });
+          await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
         }
       }
     } catch (error) {
@@ -558,7 +603,7 @@ async function handleRequest(request, response) {
       return;
     }
 
-    if (request.method === "GET" && url.pathname === "/webhook") {
+    if (request.method === "GET" && (url.pathname === "/webhook" || url.pathname === "/ig/webhook")) {
       verifyWebhook(request, response, url);
       return;
     }
@@ -575,7 +620,12 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
-      await handleWebhookPost(request, response);
+      await handleWebhookPost(request, response, whatsappChannel);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/ig/webhook") {
+      await handleWebhookPost(request, response, instagramChannel);
       return;
     }
 

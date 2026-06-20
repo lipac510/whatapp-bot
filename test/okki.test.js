@@ -34,6 +34,26 @@ test("builds OKKI customer payload from inquiry", () => {
   assert.match(payload.remark, /Videos:1/);
 });
 
+test("builds OKKI payload from an Instagram inquiry using the collected WhatsApp number", () => {
+  const payload = buildOkkiCompanyPayload({
+    customerId: "instagram:17841400000000001",
+    channel: "instagram",
+    whatsapp: "8618014856231",
+    displayName: "iguser",
+    product: "Paper Bag",
+    quantity: "5000",
+    address: "Dubai, UAE"
+  });
+
+  // The channel-prefixed routing id must NOT leak into the phone fields.
+  assert.equal(payload.name, "8618014856231");
+  assert.equal(payload.country, "AE");
+  assert.equal(payload.tel_area_code, "86");
+  assert.equal(payload.tel, "18014856231");
+  assert.equal(payload.customers[0].whatsapp, "8618014856231");
+  assert.equal(payload.customers[0].name, "iguser");
+});
+
 test("uses WhatsApp number as fallback contact name", () => {
   const payload = buildOkkiCompanyPayload({
     customerId: "8618014856231",

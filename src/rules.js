@@ -127,6 +127,16 @@ export function isHighValueQuantity(quantityText, threshold = 5000) {
   return parseQuantity(quantityText) >= threshold;
 }
 
+export function normalizeWhatsAppAnswer(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (digits.length < 8 || digits.length > 15) return "";
+  return digits;
+}
+
+export function isValidWhatsAppAnswer(value) {
+  return Boolean(normalizeWhatsAppAnswer(value));
+}
+
 export function isRestrictedCountry(countryCode) {
   return restrictedCountries.has(countryCode) || latinAmericaCountries.has(countryCode);
 }
@@ -160,7 +170,7 @@ export function canResolveInquiryCountry(inquiry = {}) {
   return Boolean(
     inferCountry({
       address: inquiry.address || "",
-      phone: inquiry.customerId || ""
+      phone: inquiry.whatsapp || inquiry.customerId || ""
     })
   );
 }

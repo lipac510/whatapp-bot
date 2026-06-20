@@ -65,6 +65,45 @@ test("falls back to manual address when customer rejects phone-based country gue
   assert.equal(result.inquiry.address, "Dubai, UAE");
 });
 
+test("instagram flow collects product, quantity, address, then WhatsApp", () => {
+  let result = startConversation("", "instagram:ig-1", "instagram");
+  assert.equal(result.session.step, "product");
+  assert.equal(result.session.channel, "instagram");
+
+  result = handleCustomerMessage(result.session, "1", "", "instagram:ig-1");
+  assert.equal(result.session.step, "quantity");
+
+  // High-value quantity must NOT short-circuit on Instagram (no number yet).
+  result = handleCustomerMessage(result.session, "5000", "", "instagram:ig-1");
+  assert.equal(result.session.step, "address");
+  assert.equal(result.complete, false);
+
+  result = handleCustomerMessage(result.session, "Dubai, UAE", "", "instagram:ig-1");
+  assert.equal(result.session.step, "whatsapp");
+  assert.match(result.replies[0], /WhatsApp number/i);
+
+  result = handleCustomerMessage(result.session, "+1 718 555 1234", "", "instagram:ig-1");
+  assert.equal(result.complete, true);
+  assert.equal(result.inquiry.product, "Corrugated Box");
+  assert.equal(result.inquiry.quantity, "5000");
+  assert.equal(result.inquiry.address, "Dubai, UAE");
+  assert.equal(result.inquiry.whatsapp, "17185551234");
+  assert.equal(result.inquiry.fastTrack, true);
+});
+
+test("instagram flow rejects an invalid WhatsApp number", () => {
+  let result = startConversation("", "instagram:ig-2", "instagram");
+  result = handleCustomerMessage(result.session, "2", "", "instagram:ig-2");
+  result = handleCustomerMessage(result.session, "1000 pcs", "", "instagram:ig-2");
+  result = handleCustomerMessage(result.session, "Canada", "", "instagram:ig-2");
+  assert.equal(result.session.step, "whatsapp");
+
+  result = handleCustomerMessage(result.session, "hello", "", "instagram:ig-2");
+  assert.equal(result.session.step, "whatsapp");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /valid WhatsApp number/i);
+});
+
 test("answers bot questions without advancing", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "Are you a bot?", "Alice");
