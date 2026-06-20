@@ -51,6 +51,13 @@ export const config = {
   igAccessToken: process.env.IG_ACCESS_TOKEN || "",
   igAccounts: parseIgAccounts(process.env.IG_ACCOUNTS),
   igAppSecret: process.env.IG_APP_SECRET || "",
+  // Short display names for our own IG accounts (shown in /admin). Override/extend via IG_ACCOUNT_NAMES.
+  igAccountNames: {
+    "17841428040000323": "Ins sa",
+    "17841474162415513": "Ins ae",
+    "17841451800200162": "ins USA",
+    ...parseIgAccounts(process.env.IG_ACCOUNT_NAMES)
+  },
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "",
   appSecret: process.env.META_APP_SECRET || "",
   businessName: process.env.BUSINESS_NAME || "Lipack Packaging",

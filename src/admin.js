@@ -1,3 +1,13 @@
+import { config } from "./config.js";
+
+// Pull our account id + the customer's IG id out of an "instagram:<acct>:<user>" routing id.
+function parseIgRoutingId(customerId) {
+  const body = String(customerId || "").replace(/^instagram:/, "");
+  const sep = body.indexOf(":");
+  if (sep === -1) return { igAccountId: "", igUserId: body };
+  return { igAccountId: body.slice(0, sep), igUserId: body.slice(sep + 1) };
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -97,11 +107,35 @@ export function buildAdminModel({
       session?.channel ||
       (String(customerId).startsWith("instagram:") ? "instagram" : "whatsapp");
 
+    const isIg = channel === "instagram";
+    const { igAccountId: parsedAccountId, igUserId } = isIg
+      ? parseIgRoutingId(customerId)
+      : { igAccountId: "", igUserId: "" };
+    const igAccountId = latestInquiry.instagramAccountId || parsedAccountId;
+
+    // 1) customer WhatsApp number, 2) customer @handle/name, 3) which of our accounts handled it.
+    const whatsapp =
+      latestInquiry.whatsapp || session?.data?.whatsapp || (isIg ? "" : customerId);
+    const igHandle = latestInquiry.instagramUsername || "";
+    const customerName = isIg
+      ? igHandle || latestInquiry.displayName || profileName || ""
+      : profileName || "";
+    const accountAlias = isIg
+      ? config.igAccountNames[igAccountId] || (igAccountId ? `IG·${igAccountId.slice(-4)}` : "Instagram")
+      : "WhatsApp";
+    const primaryLabel =
+      whatsapp || (isIg ? igHandle || (igUserId ? `IG ${igUserId.slice(-6)}` : customerId) : customerId);
+
     return {
       customerId,
       profileName,
       channel,
       source: channel === "instagram" ? "Instagram" : "WhatsApp",
+      primaryLabel,
+      customerName,
+      whatsapp,
+      igHandle,
+      accountAlias,
       status,
       messageCount: customerMessages.length,
       inquiryCount: customerInquiries.length,
@@ -134,6 +168,9 @@ export function buildAdminModel({
         [
           item.customerId,
           item.profileName,
+          item.whatsapp,
+          item.customerName,
+          item.accountAlias,
           item.source,
           item.status,
           item.product,
@@ -172,7 +209,8 @@ export function renderAdminCsv(model = {}) {
     [
       "No.",
       "Customer ID",
-      "Profile Name",
+      "WhatsApp",
+      "Customer Name",
       "Source",
       "Status",
       "Product",
@@ -185,12 +223,15 @@ export function renderAdminCsv(model = {}) {
     ].map(csvCell).join(",")
   ];
 
-  (model.conversations || []).forEach((item, index) => {
+  const conversations = model.conversations || [];
+  const total = conversations.length;
+  conversations.forEach((item, index) => {
     rows.push(
       [
-        index + 1,
+        total - index,
         item.customerId,
-        item.profileName,
+        item.whatsapp,
+        item.customerName,
         item.source,
         item.status,
         item.product,
@@ -269,13 +310,18 @@ export function renderAdminPage({
   query = ""
 }) {
   const exportHref = `/admin/export.csv${query ? `?q=${encodeURIComponent(query)}` : ""}`;
+  const total = model.conversations.length;
   const rows = model.conversations.map((item, index) => {
     const active = item.customerId === selectedCustomerId ? " active" : "";
     const href = `/admin?customer=${encodeURIComponent(item.customerId)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
+    const nameLine =
+      item.customerName && item.customerName !== item.primaryLabel
+        ? `<br><small>${escapeHtml(item.customerName)}</small>`
+        : "";
     return `
       <tr class="${active}">
-        <td>${index + 1}</td>
-        <td><a href="${href}">${escapeHtml(item.customerId)}</a><br><small>${escapeHtml(item.profileName)}</small><br><small class="source ${escapeHtml(item.channel)}">${escapeHtml(item.source)}</small></td>
+        <td>${total - index}</td>
+        <td><a href="${href}" title="${escapeHtml(item.customerId)}">${escapeHtml(item.primaryLabel)}</a>${nameLine}<br><small class="source ${escapeHtml(item.channel)}">${escapeHtml(item.accountAlias)}</small></td>
         <td>${renderBadge(item.status)}<br><small>${escapeHtml(item.knownReason)}</small></td>
         <td>${escapeHtml(item.product)}<br><small>${escapeHtml(item.quantity)} · ${escapeHtml(item.address)}</small></td>
         <td>${escapeHtml(item.messageCount)}</td>
