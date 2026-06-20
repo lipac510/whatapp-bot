@@ -50,6 +50,7 @@ import {
 } from "./rules.js";
 import { extractIncomingMessages, fetchMedia, sendTextMessage } from "./whatsapp.js";
 import * as instagram from "./instagram.js";
+import { renderPrivacyPage, renderDataDeletionPage } from "./legal.js";
 
 // A channel adapter lets one inquiry pipeline serve both WhatsApp and Instagram.
 // WhatsApp keeps its exact previous behaviour; Instagram plugs in its own parser,
@@ -619,6 +620,16 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && (url.pathname === "/webhook" || url.pathname === "/ig/webhook")) {
       verifyWebhook(request, response, url);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/privacy") {
+      sendHtml(response, 200, renderPrivacyPage());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/data-deletion") {
+      sendHtml(response, 200, renderDataDeletionPage());
       return;
     }
 
