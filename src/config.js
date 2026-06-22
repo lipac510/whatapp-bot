@@ -75,7 +75,8 @@ export const config = {
   okkiOwnerUserId: process.env.OKKI_OWNER_USER_ID || "",
   okkiInquirySummaryFieldId: process.env.OKKI_INQUIRY_SUMMARY_FIELD_ID || "",
   okkiPurchaseQuantityFieldId: process.env.OKKI_PURCHASE_QUANTITY_FIELD_ID || "",
-  okkiInquiryProductFieldId: process.env.OKKI_INQUIRY_PRODUCT_FIELD_ID || ""
+  okkiInquiryProductFieldId: process.env.OKKI_INQUIRY_PRODUCT_FIELD_ID || "",
+  okkiImageLinkFieldId: process.env.OKKI_IMAGE_LINK_FIELD_ID || "101196736270696"
 };
 
 export function shouldVerifyWebhookSignature() {

@@ -4,6 +4,7 @@ import {
   inferCountryFromPhone
 } from "./country.js";
 import {
+  humanFallbackReply,
   isHighValueQuantity,
   isMeaningfulAddressAnswer,
   isValidQuantityAnswer,
@@ -12,6 +13,8 @@ import {
   normalizeProductAnswer,
   normalizeWhatsAppAnswer
 } from "./rules.js";
+
+const maxInvalidBeforeHandoff = 3;
 
 // WhatsApp already knows the customer's number (the sender id), so it confirms the country
 // straight from the phone prefix. Instagram has no phone, so it first COLLECTS the WhatsApp
@@ -329,16 +332,25 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
 
   const invalidMessage = validateStepAnswer(step, text);
   if (invalidMessage) {
+    const invalidCount = (session.invalidCount || 0) + 1;
+    const baseSession = {
+      ...session,
+      invalidCount,
+      data: { ...session.data, customerLinks }
+    };
+
+    // After several failed attempts the customer is likely stuck (or sending something we
+    // can't parse) — hand off to a human once, then keep re-prompting normally.
+    if (invalidCount >= maxInvalidBeforeHandoff && !session.humanFallbackSent) {
+      return {
+        session: { ...baseSession, humanFallbackSent: true, invalidCount: 0 },
+        replies: [humanFallbackReply],
+        complete: false
+      };
+    }
+
     return {
-      session: customerLinks.length
-        ? {
-            ...session,
-            data: {
-              ...session.data,
-              customerLinks
-            }
-          }
-        : session,
+      session: baseSession,
       replies: [invalidMessage],
       complete: false
     };
@@ -422,6 +434,7 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
     ...session,
     profileName: session.profileName || profileName,
     customerId: session.customerId || customerId,
+    invalidCount: 0,
     ...(highValue ? { fastTrack: true } : {}),
     data: {
       ...session.data,

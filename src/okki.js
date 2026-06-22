@@ -165,6 +165,13 @@ export function buildOkkiCompanyPayload(inquiry) {
   }
   setConfiguredField(payload, config.okkiInquirySummaryFieldId, compactInquirySummary || inquirySummary);
 
+  // One short gallery link (opens all photos/videos) — keeps the image-link field within
+  // OKKI's character limit no matter how many files the customer sent.
+  if (inquiry.mediaToken && config.publicBaseUrl) {
+    const galleryUrl = `${config.publicBaseUrl.replace(/\/$/, "")}/g/${inquiry.mediaToken}`;
+    setConfiguredField(payload, config.okkiImageLinkFieldId, galleryUrl);
+  }
+
   return payload;
 }
 

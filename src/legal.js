@@ -30,6 +30,54 @@ ${bodyHtml}
 </html>`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+const escapeAttr = escapeHtml;
+
+// A single page that shows all photos/videos/links from one inquiry, so OKKI only needs to
+// store one short link. Note: Instagram CDN links are time-limited and may expire after a few
+// days (re-hosting is a phase-2 item); WhatsApp media is served by this app and stays valid.
+export function renderGalleryPage(inquiry = {}) {
+  const images = inquiry.imageLinks || [];
+  const videos = inquiry.videoLinks || [];
+  const links = inquiry.customerLinks || [];
+  const title = [inquiry.product, inquiry.quantity].filter(Boolean).join(" · ");
+
+  const section = (label, html) => (html ? `<h2>${label}</h2>${html}` : "");
+  const imgHtml = images
+    .map((u) => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener"><img src="${escapeAttr(u)}" loading="lazy"></a>`)
+    .join("");
+  const vidHtml = videos
+    .map((u, i) => `<p><a href="${escapeAttr(u)}" target="_blank" rel="noopener">▶ Video ${i + 1}</a></p>`)
+    .join("");
+  const linkHtml = links
+    .map((u) => `<p><a href="${escapeAttr(u)}" target="_blank" rel="noopener">${escapeHtml(u)}</a></p>`)
+    .join("");
+
+  return page(
+    "Customer media",
+    `
+  <h1>Customer media</h1>
+  ${title ? `<p class="muted">${escapeHtml(title)}${inquiry.whatsapp ? ` · WhatsApp ${escapeHtml(inquiry.whatsapp)}` : ""}</p>` : ""}
+  ${section(`Photos (${images.length})`, imgHtml ? `<div class="grid">${imgHtml}</div>` : "")}
+  ${section(`Videos (${videos.length})`, vidHtml)}
+  ${section(`Links (${links.length})`, linkHtml)}
+  ${!images.length && !videos.length && !links.length ? "<p>No media.</p>" : ""}
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .grid img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; }
+  </style>
+`
+  );
+}
+
 export function renderPrivacyPage() {
   return page(
     "Privacy Policy",

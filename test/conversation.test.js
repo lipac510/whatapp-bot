@@ -117,6 +117,17 @@ test("instagram flow falls back to manual address when country guess is rejected
   assert.equal(result.inquiry.address, "Canada");
 });
 
+test("hands off to a human after repeated invalid answers", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "hi", "Alice");
+  assert.match(result.replies[0], /reply with 1, 2, 3, or 4/i);
+  result = handleCustomerMessage(result.session, "hi", "Alice");
+  assert.match(result.replies[0], /reply with 1, 2, 3, or 4/i);
+  result = handleCustomerMessage(result.session, "hi", "Alice");
+  assert.match(result.replies[0], /Emma -- NANJING LIPACK/);
+  assert.match(result.replies[0], /86-18014856231/);
+});
+
 test("answers bot questions without advancing", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "Are you a bot?", "Alice");

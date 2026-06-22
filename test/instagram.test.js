@@ -105,6 +105,28 @@ test("records story/share attachments as a text link so they are captured", () =
   assert.match(messages[0].text, /instagram\.com\/p\/abc/);
 });
 
+test("surfaces an unparseable message as unsupported", () => {
+  const messages = extractIncomingMessages({
+    object: "instagram",
+    entry: [
+      {
+        id: "acct-9",
+        messaging: [
+          {
+            sender: { id: "ig-9" },
+            recipient: { id: "acct-9" },
+            message: { mid: "mid.audio", attachments: [{ type: "audio", payload: {} }] }
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, "unsupported");
+  assert.equal(messages[0].from, "instagram:acct-9:ig-9");
+});
+
 test("routing id encodes account + user and round-trips", () => {
   assert.equal(toRoutingId("acct-1", "user-9"), "instagram:acct-1:user-9");
   assert.deepEqual(parseRoutingId("instagram:acct-1:user-9"), {

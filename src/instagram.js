@@ -84,7 +84,12 @@ export function extractIncomingMessages(webhookBody) {
         .join(" ")
         .trim();
 
-      if (!text) continue; // nothing actionable (e.g. an unsupported attachment with no url)
+      if (!text) {
+        // A real inbound message we can't parse (voice note, sticker, unknown attachment with
+        // no url). Surface it as "unsupported" so the bot can hand off to a human.
+        messages.push({ ...base, type: "unsupported", text: "" });
+        continue;
+      }
 
       messages.push({
         ...base,

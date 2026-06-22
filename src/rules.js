@@ -66,6 +66,12 @@ export const existingCustomerReply = [
   "Email: emma@cnlipack.com"
 ].join("\n");
 
+export const humanFallbackReply = [
+  "Emma -- NANJING LIPACK",
+  "",
+  "Cell: 86-18014856231 ( whatsapp/wechat )"
+].join("\n");
+
 export const noShippingAgentReply =
   "Thank you for your inquiry, but sorry that we don't have the shipping agent to your country now.";
 

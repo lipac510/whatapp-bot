@@ -40,6 +40,7 @@ import { inferCountry } from "./country.js";
 import {
   canResolveInquiryCountry,
   existingCustomerReply,
+  humanFallbackReply,
   isHumanHandoffRequest,
   isMeaningfulAddressAnswer,
   isOfficialCodeMessage,
@@ -56,7 +57,7 @@ import {
   startTokenScheduler,
   tokenSnapshot
 } from "./igTokens.js";
-import { renderPrivacyPage, renderDataDeletionPage } from "./legal.js";
+import { renderPrivacyPage, renderDataDeletionPage, renderGalleryPage } from "./legal.js";
 
 // A channel adapter lets one inquiry pipeline serve both WhatsApp and Instagram.
 // WhatsApp keeps its exact previous behaviour; Instagram plugs in its own parser,
@@ -194,9 +195,9 @@ function isWithinHours(isoDate, hours) {
   return Date.now() - time < hours * 60 * 60 * 1000;
 }
 
-async function sendEmmaReplyOnce(channel, customerId, reason) {
+async function sendEmmaReplyOnce(channel, customerId, reason, text = existingCustomerReply) {
   if (await wasEmmaReplySent(customerId)) return false;
-  await sendAndLogText(channel, customerId, existingCustomerReply, { category: reason });
+  await sendAndLogText(channel, customerId, text, { category: reason });
   await markEmmaReplySent(customerId, reason);
   await saveSystemEvent(customerId, "Emma contact sent", reason);
   return true;
@@ -316,6 +317,13 @@ async function handleWebhookPost(request, response, channel) {
 
       await saveInboundMessageEvent(channel, message, request);
 
+      if (message.type === "unsupported") {
+        // Message the bot can't parse (e.g. voice note / sticker) — hand off to a human once.
+        await sendEmmaReplyOnce(channel, message.from, "unsupported_message", humanFallbackReply);
+        await markMessageProcessed(message.id);
+        continue;
+      }
+
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
         const noticeTime = new Date().toISOString().replace(/[:.]/g, "-");
         const officialNotice = {
@@ -428,6 +436,12 @@ async function handleWebhookPost(request, response, channel) {
               }
             : {})
         };
+        // If the customer sent any media/links, mint a token for a single short gallery URL
+        // (so OKKI's image-link field holds one link, not a list that overflows the limit).
+        if (inquiry.imageLinks?.length || inquiry.videoLinks?.length || inquiry.customerLinks?.length) {
+          inquiry.mediaToken = crypto.randomBytes(9).toString("base64url");
+        }
+
         const inquiryQualityError = getInquiryQualityError(inquiry);
         if (inquiryQualityError) {
           const fallbackStep = inquiryQualityError === "Invalid quantity" ? "quantity" : "address";
@@ -640,6 +654,18 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/data-deletion") {
       sendHtml(response, 200, renderDataDeletionPage());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/g/")) {
+      const token = decodeURIComponent(url.pathname.slice("/g/".length));
+      const inquiries = await listInquiries();
+      const inquiry = token && inquiries.find((item) => item.mediaToken === token);
+      if (!inquiry) {
+        sendHtml(response, 404, "<p>Gallery not found or expired.</p>");
+        return;
+      }
+      sendHtml(response, 200, renderGalleryPage(inquiry));
       return;
     }
 
