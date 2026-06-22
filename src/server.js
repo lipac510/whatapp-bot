@@ -58,6 +58,11 @@ import {
   tokenSnapshot
 } from "./igTokens.js";
 import { renderPrivacyPage, renderDataDeletionPage, renderGalleryPage } from "./legal.js";
+import { detectArabic, localize } from "./i18n.js";
+
+// Sticky per-customer reply language (in-memory). Set to "ar" once a customer writes Arabic;
+// outbound replies are then localized at the single send chokepoint (sendAndLogText).
+const langByCustomer = new Map();
 
 // A channel adapter lets one inquiry pipeline serve both WhatsApp and Instagram.
 // WhatsApp keeps its exact previous behaviour; Instagram plugs in its own parser,
@@ -217,13 +222,14 @@ async function handleRecentHandoffWindow(channel, customerId) {
 }
 
 async function sendAndLogText(channel, customerId, text, extra = {}) {
-  await channel.sendText(customerId, text);
+  const outText = localize(text, langByCustomer.get(customerId) || "en");
+  await channel.sendText(customerId, outText);
   await saveMessageEvent({
     customerId,
     channel: channel.name,
     direction: "out",
     type: "text",
-    text,
+    text: outText,
     ...extra
   });
 }
@@ -316,6 +322,9 @@ async function handleWebhookPost(request, response, channel) {
       }
 
       await saveInboundMessageEvent(channel, message, request);
+
+      // Detect Arabic and remember it for this customer (sticky — never downgraded).
+      if (detectArabic(message.text)) langByCustomer.set(message.from, "ar");
 
       if (message.type === "unsupported") {
         // Message the bot can't parse (e.g. voice note / sticker) — hand off to a human once.
