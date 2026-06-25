@@ -46,6 +46,26 @@ test("builds admin conversations from message and OKKI logs", () => {
   assert.equal(model.conversations[0].product, "Corrugated Box");
 });
 
+test("assigns a stable first-contact number independent of recent-activity order", () => {
+  const model = buildAdminModel({
+    messages: [
+      { customerId: "A", text: "hi", createdAt: "2026-06-01T00:00:00.000Z" },
+      { customerId: "B", text: "hi", createdAt: "2026-06-02T00:00:00.000Z" },
+      { customerId: "A", text: "again", createdAt: "2026-06-03T00:00:00.000Z" }
+    ]
+  });
+
+  // List is sorted by recent activity: A (active 06-03) on top, B below.
+  assert.equal(model.conversations[0].customerId, "A");
+  assert.equal(model.conversations[1].customerId, "B");
+
+  // But the number is by FIRST contact and never changes: A = 1, B = 2.
+  const a = model.conversations.find((c) => c.customerId === "A");
+  const b = model.conversations.find((c) => c.customerId === "B");
+  assert.equal(a.seqNo, 1);
+  assert.equal(b.seqNo, 2);
+});
+
 test("filters admin conversations by product or customer", () => {
   const model = buildAdminModel({
     messages: [

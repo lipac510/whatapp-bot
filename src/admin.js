@@ -42,6 +42,14 @@ function latestCreatedAt(items) {
     .sort((a, b) => b - a)[0] || 0;
 }
 
+// Earliest activity for a customer — used to assign a stable "first contact" sequence number.
+function earliestCreatedAt(items) {
+  const times = items
+    .map((item) => new Date(item.createdAt || item.updatedAt || 0).getTime())
+    .filter((t) => Number.isFinite(t) && t > 0);
+  return times.length ? Math.min(...times) : 0;
+}
+
 function inferStatus({ customerId, messages, inquiries, failures, okkiSyncs, sessions, knownCustomers }) {
   const customerFailures = failures.filter((item) => item.customerId === customerId);
   const customerSyncs = okkiSyncs.filter((item) => item.customerId === customerId);
@@ -149,6 +157,7 @@ export function buildAdminModel({
       handoff: handoffWindows[customerId] || null,
       emmaReply: emmaReplies[customerId] || null,
       lastText: lastMessage.text || lastMessage.label || "",
+      firstAt: earliestCreatedAt([...customerMessages, ...customerInquiries]),
       lastAt: latestCreatedAt([
         ...customerMessages,
         ...customerInquiries,
@@ -160,7 +169,17 @@ export function buildAdminModel({
         emmaReplies[customerId] || {}
       ])
     };
-  }).sort((a, b) => b.lastAt - a.lastAt);
+  });
+
+  // Stable per-customer number by first-contact order: the 1st customer ever = 1, the newest
+  // gets the largest number. It never changes when the activity-sorted list reorders.
+  [...conversations]
+    .sort((a, b) => a.firstAt - b.firstAt)
+    .forEach((item, index) => {
+      item.seqNo = index + 1;
+    });
+
+  conversations.sort((a, b) => b.lastAt - a.lastAt);
 
   const needle = normalize(query);
   const filteredConversations = needle
@@ -224,11 +243,10 @@ export function renderAdminCsv(model = {}) {
   ];
 
   const conversations = model.conversations || [];
-  const total = conversations.length;
-  conversations.forEach((item, index) => {
+  conversations.forEach((item) => {
     rows.push(
       [
-        total - index,
+        item.seqNo,
         item.customerId,
         item.whatsapp,
         item.customerName,
@@ -310,8 +328,7 @@ export function renderAdminPage({
   query = ""
 }) {
   const exportHref = `/admin/export.csv${query ? `?q=${encodeURIComponent(query)}` : ""}`;
-  const total = model.conversations.length;
-  const rows = model.conversations.map((item, index) => {
+  const rows = model.conversations.map((item) => {
     const active = item.customerId === selectedCustomerId ? " active" : "";
     const href = `/admin?customer=${encodeURIComponent(item.customerId)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
     const nameLine =
@@ -320,7 +337,7 @@ export function renderAdminPage({
         : "";
     return `
       <tr class="${active}">
-        <td>${total - index}</td>
+        <td>${item.seqNo}</td>
         <td><a href="${href}" title="${escapeHtml(item.customerId)}">${escapeHtml(item.primaryLabel)}</a>${nameLine}<br><small class="source ${escapeHtml(item.channel)}">${escapeHtml(item.accountAlias)}</small></td>
         <td>${renderBadge(item.status)}<br><small>${escapeHtml(item.knownReason)}</small></td>
         <td>${escapeHtml(item.product)}<br><small>${escapeHtml(item.quantity)} · ${escapeHtml(item.address)}</small></td>
