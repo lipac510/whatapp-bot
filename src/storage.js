@@ -181,10 +181,9 @@ export async function listSessions() {
     return readJson(sessionsPath, {});
   }
 
-  const rows = await supabaseSelect("sessions", {
+  const rows = await supabaseSelectAll("sessions", {
     select: "customer_id,payload,updated_at",
-    order: "updated_at.desc",
-    limit: "500"
+    order: "updated_at.desc"
   });
   return Object.fromEntries(rows.map((row) => [row.customer_id, rowToStoredPayload(row)]));
 }
