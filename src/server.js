@@ -816,8 +816,10 @@ async function handleRequest(request, response) {
 // ---------------------------------------------------------------------------
 
 function hasValidPhone(customerId, whatsapp) {
-  const raw = whatsapp || customerId || "";
-  return /\d{6,}/.test(raw.replace(/\D/g, ""));
+  const isIg = String(customerId).startsWith("instagram:");
+  // Instagram customers must have a real collected WhatsApp number — never use the IG routing id.
+  const raw = isIg ? (whatsapp || "") : (whatsapp || customerId || "");
+  return /\d{7,}/.test(raw.replace(/\D/g, ""));
 }
 
 function isRestrictedFailure(failureError) {
