@@ -35,7 +35,7 @@ import {
   handleCustomerVideo,
   handoffReminderMessage
 } from "./conversation.js";
-import { createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
+import { buildOkkiCompanyPayload, createOkkiCustomerFromInquiry, getOkkiDiagnostics } from "./okki.js";
 import { inferCountry } from "./country.js";
 import {
   canResolveInquiryCountry,
@@ -786,11 +786,177 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // Single retry
+    if (request.method === "POST" && url.pathname.startsWith("/admin/retry-okki/")) {
+      if (!requireAdmin(request, response)) return;
+      const customerId = decodeURIComponent(url.pathname.slice("/admin/retry-okki/".length));
+      const result = await retrySingleCustomer(customerId);
+      sendJson(response, 200, result);
+      return;
+    }
+
+    // Bulk retry
+    if (request.method === "POST" && url.pathname === "/admin/retry-okki") {
+      if (!requireAdmin(request, response)) return;
+      const stats = await runRetryEligible();
+      sendJson(response, 200, stats);
+      return;
+    }
+
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
     console.error(error);
     sendJson(response, 500, { error: error.message });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Retry OKKI sync — relaxed bar: quantity + phone, no address/country check.
+// Covers two groups: (A) Needs-review customers, (B) 8+ message customers.
+// ---------------------------------------------------------------------------
+
+function hasValidPhone(customerId, whatsapp) {
+  const raw = whatsapp || customerId || "";
+  return /\d{6,}/.test(raw.replace(/\D/g, ""));
+}
+
+function isRestrictedFailure(failureError) {
+  return String(failureError || "").includes("Restricted country skipped");
+}
+
+function inquiryFromSession(customerId, session) {
+  const data = session?.data || {};
+  return {
+    customerId,
+    channel: session?.channel || "whatsapp",
+    profileName: session?.profileName || "",
+    displayName: session?.profileName || "",
+    whatsapp: data.whatsapp || (String(customerId).startsWith("instagram:") ? "" : customerId),
+    product: data.product || "",
+    quantity: data.quantity || "",
+    address: data.address || "",
+    customerLinks: data.customerLinks || [],
+    imageLinks: data.imageLinks || [],
+    videoLinks: data.videoLinks || [],
+    instagramUsername: session?.instagramUsername || "",
+    instagramAccountId: session?.instagramAccountId || ""
+  };
+}
+
+async function retrySingleCustomer(customerId) {
+  const [inquiries, sessions, failures, okkiSyncs] = await Promise.all([
+    listInquiries(),
+    listSessions(),
+    listFailures(),
+    listOkkiSyncs()
+  ]);
+
+  const alreadySynced = okkiSyncs.some((s) => s.customerId === customerId && s.ok === true);
+  if (alreadySynced) return { result: "skipped", reason: "already synced" };
+
+  const knownCustomers = await listKnownCustomers();
+  if (knownCustomers[customerId]?.reason === "okki_existing") {
+    return { result: "skipped", reason: "existing customer" };
+  }
+
+  const customerFailures = failures.filter((f) => f.customerId === customerId);
+  if (customerFailures.some((f) => isRestrictedFailure(f.error))) {
+    return { result: "skipped", reason: "restricted country" };
+  }
+
+  const customerInquiries = inquiries.filter((i) => i.customerId === customerId);
+  const session = sessions[customerId] || null;
+  const inquiry = customerInquiries.at(-1) || (session ? inquiryFromSession(customerId, session) : null);
+  if (!inquiry) return { result: "skipped", reason: "no data" };
+
+  const phone = inquiry.whatsapp || (String(customerId).startsWith("instagram:") ? "" : customerId);
+  if (!inquiry.quantity || !hasValidPhone(customerId, phone)) {
+    return { result: "skipped", reason: "missing quantity or phone" };
+  }
+
+  try {
+    const okki = await createOkkiCustomerFromInquiry(inquiry);
+    if (!okki.enabled) return { result: "skipped", reason: "okki not configured" };
+    await saveOkkiSync({ customerId, ok: true, result: okki.result, messageId: "" });
+    await markKnownCustomer(customerId, "okki_synced");
+    await clearSession(customerId);
+    return { result: "synced" };
+  } catch (err) {
+    if (isExistingCustomerError(err.message)) {
+      await markKnownCustomer(customerId, "okki_existing");
+      await clearSession(customerId);
+      return { result: "existing" };
+    }
+    await saveFailure({ customerId, messageId: "", text: "", error: `Retry failed: ${err.message}` });
+    return { result: "failed", reason: err.message };
+  }
+}
+
+async function runRetryEligible() {
+  const [inquiries, sessions, failures, okkiSyncs, messages, knownCustomers] = await Promise.all([
+    listInquiries(),
+    listSessions(),
+    listFailures(),
+    listOkkiSyncs(),
+    listMessageEvents(),
+    listKnownCustomers()
+  ]);
+
+  const syncedIds = new Set(okkiSyncs.filter((s) => s.ok === true).map((s) => s.customerId));
+  const existingIds = new Set(
+    Object.entries(knownCustomers)
+      .filter(([, v]) => v.reason === "okki_existing")
+      .map(([k]) => k)
+  );
+
+  const eligible = new Set();
+
+  // Group A: Needs-review (has failures, not synced, not restricted)
+  for (const f of failures) {
+    const id = f.customerId;
+    if (!id || syncedIds.has(id) || existingIds.has(id)) continue;
+    if (isRestrictedFailure(f.error)) continue;
+    eligible.add(id);
+  }
+
+  // Group B: 8+ messages, not synced, not existing
+  const msgCountById = {};
+  for (const m of messages) {
+    if (m.customerId) msgCountById[m.customerId] = (msgCountById[m.customerId] || 0) + 1;
+  }
+  for (const [id, count] of Object.entries(msgCountById)) {
+    if (count <= 8) continue;
+    if (syncedIds.has(id) || existingIds.has(id)) continue;
+    eligible.add(id);
+  }
+
+  let synced = 0, skipped = 0, failed = 0;
+  for (const customerId of eligible) {
+    const res = await retrySingleCustomer(customerId);
+    if (res.result === "synced" || res.result === "existing") synced++;
+    else if (res.result === "skipped") skipped++;
+    else failed++;
+  }
+
+  console.log(`[retry] total=${eligible.size} synced=${synced} skipped=${skipped} failed=${failed}`);
+  return { total: eligible.size, synced, skipped, failed };
+}
+
+// Daily auto-retry at UTC 00:00 (Beijing 08:00)
+function scheduleDailyRetry() {
+  const now = new Date();
+  const nextRun = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  const delay = nextRun.getTime() - now.getTime();
+  setTimeout(async () => {
+    console.log("[daily-retry] Starting daily OKKI retry scan…");
+    try {
+      const stats = await runRetryEligible();
+      console.log(`[daily-retry] Done: synced=${stats.synced} skipped=${stats.skipped} failed=${stats.failed}`);
+    } catch (err) {
+      console.error(`[daily-retry] Error: ${err.message}`);
+    }
+    scheduleDailyRetry();
+  }, delay);
 }
 
 const missing = validateConfig();
@@ -821,4 +987,5 @@ server.listen(config.port, config.host, async () => {
   console.log(`WhatsApp bot listening on http://${config.host}:${config.port}`);
   await initIgTokens().catch((error) => console.warn(`Instagram token init failed: ${error.message}`));
   startTokenScheduler();
+  scheduleDailyRetry();
 });

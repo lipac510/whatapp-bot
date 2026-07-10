@@ -148,6 +148,7 @@ export function buildAdminModel({
       messageCount: customerMessages.length,
       inquiryCount: customerInquiries.length,
       failureCount: customerFailures.length,
+      latestFailureReason: (customerFailures.at(-1) || {}).error || "",
       okkiSyncCount: customerSyncs.filter((item) => item.ok === true).length,
       sessionStep: session?.step || "",
       product: latestInquiry.product || session?.data?.product || "",
@@ -343,7 +344,8 @@ export function renderAdminPage({
         <td>${escapeHtml(item.product)}<br><small>${escapeHtml(item.quantity)} · ${escapeHtml(item.address)}</small></td>
         <td>${escapeHtml(item.messageCount)}</td>
         <td>${escapeHtml(item.failureCount)}</td>
-        <td>${escapeHtml(formatTime(item.lastAt))}</td>
+        <td>${item.status === "Needs review" && item.latestFailureReason ? `<small class="failure-reason">${escapeHtml(item.latestFailureReason.slice(0, 60))}</small>` : ""}</td>
+        <td>${escapeHtml(formatTime(item.lastAt))}${item.status === "Needs review" ? `<br><button class="retry-btn" data-id="${escapeHtml(item.customerId)}" onclick="retryOne(this)">Retry</button>` : ""}</td>
       </tr>`;
   }).join("");
 
@@ -397,7 +399,43 @@ export function renderAdminPage({
     .json { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; max-height: 420px; overflow: auto; }
     .empty { min-height: 180px; color: #64748b; }
     @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } }
+    .retry-btn { margin-top: 4px; padding: 3px 8px; font-size: 12px; border: 0; border-radius: 4px; background: #2563eb; color: white; cursor: pointer; font-weight: 600; }
+    .retry-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    .retry-all-btn { padding: 9px 14px; border: 0; border-radius: 6px; background: #7c3aed; color: white; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .retry-all-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
+    .failure-reason { color: #991b1b; word-break: break-all; }
   </style>
+  <script>
+    async function retryOne(btn) {
+      var id = btn.dataset.id;
+      btn.disabled = true;
+      btn.textContent = "...";
+      try {
+        var res = await fetch("/admin/retry-okki/" + encodeURIComponent(id), { method: "POST" });
+        var data = await res.json();
+        btn.textContent = data.result === "synced" ? "Synced" : data.result === "existing" ? "Existing" : "Failed";
+        if (data.result === "synced" || data.result === "existing") {
+          setTimeout(function() { location.reload(); }, 1200);
+        }
+      } catch(e) {
+        btn.textContent = "Error";
+      }
+    }
+    async function retryAll() {
+      var btn = document.querySelector(".retry-all-btn");
+      btn.disabled = true;
+      btn.textContent = "Running...";
+      try {
+        var res = await fetch("/admin/retry-okki", { method: "POST" });
+        var data = await res.json();
+        btn.textContent = "Done: " + data.synced + " synced, " + data.skipped + " skipped, " + data.failed + " failed";
+        setTimeout(function() { location.reload(); }, 2000);
+      } catch(e) {
+        btn.textContent = "Error";
+        btn.disabled = false;
+      }
+    }
+  </script>
 </head>
 <body>
   <header>
@@ -409,6 +447,7 @@ export function renderAdminPage({
         <button type="submit">Search</button>
       </form>
       <a class="export-link" href="${exportHref}">Download Excel</a>
+      <button class="retry-all-btn" onclick="retryAll()">Retry All Eligible</button>
     </div>
   </header>
   <main>
@@ -423,8 +462,8 @@ export function renderAdminPage({
       <section class="panel">
         <h2>Customers</h2>
         <table>
-          <thead><tr><th>No.</th><th>Customer</th><th>Status</th><th>Inquiry</th><th>Msgs</th><th>Fails</th><th>Last activity</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7">No customers found.</td></tr>`}</tbody>
+          <thead><tr><th>No.</th><th>Customer</th><th>Status</th><th>Inquiry</th><th>Msgs</th><th>Fails</th><th>Failure Reason</th><th>Last activity</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8">No customers found.</td></tr>`}</tbody>
         </table>
       </section>
     </section>

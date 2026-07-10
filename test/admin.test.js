@@ -115,7 +115,8 @@ test("renders admin HTML with escaped customer content", () => {
   assert.match(html, /8618014856231/);
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /&lt;img src=x&gt;/);
-  assert.doesNotMatch(html, /<script>/);
+  // User-supplied "<script>" must be escaped; the page's own <script> block is allowed.
+  assert.doesNotMatch(html, /<script>alert/);
 });
 
 test("renders admin HTML with row number and export link", () => {
