@@ -231,16 +231,16 @@ test("can restart a conversation", () => {
   });
 });
 
-test("collects image links without advancing the conversation", () => {
+test("image at product step skips to quantity and sets product to Other", () => {
   let result = startConversation("Alice");
   result = handleCustomerImage(result.session, "https://example.com/media/abc", "Alice");
 
-  assert.equal(result.session.step, "product");
+  assert.equal(result.session.step, "quantity");
+  assert.equal(result.session.data.product, "Other");
   assert.deepEqual(result.session.data.imageLinks, ["https://example.com/media/abc"]);
   assert.match(result.replies[0], /Your photo has been received/i);
-  assert.match(result.replies[0], /what kind of packaging do you need/i);
+  assert.match(result.replies[0], /quantity/i);
 
-  result = handleCustomerMessage(result.session, "Paper bag", "Alice");
   result = handleCustomerMessage(result.session, "5000 pcs", "Alice");
 
   assert.equal(result.complete, true);

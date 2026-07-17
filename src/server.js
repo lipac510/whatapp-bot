@@ -222,6 +222,7 @@ async function handleRecentHandoffWindow(channel, customerId) {
 }
 
 async function sendAndLogText(channel, customerId, text, extra = {}) {
+  await new Promise((r) => setTimeout(r, 10000));
   const outText = localize(text, langByCustomer.get(customerId) || "en");
   await channel.sendText(customerId, outText);
   await saveMessageEvent({
@@ -868,12 +869,24 @@ async function retrySingleCustomer(customerId) {
 
   const customerInquiries = inquiries.filter((i) => i.customerId === customerId);
   const session = sessions[customerId] || null;
-  const inquiry = customerInquiries.at(-1) || (session ? inquiryFromSession(customerId, session) : null);
+  let inquiry = customerInquiries.at(-1) || (session ? inquiryFromSession(customerId, session) : null);
   if (!inquiry) return { result: "skipped", reason: "no data" };
 
   const phone = inquiry.whatsapp || (String(customerId).startsWith("instagram:") ? "" : customerId);
   if (!inquiry.quantity || !hasValidPhone(customerId, phone)) {
     return { result: "skipped", reason: "missing quantity or phone" };
+  }
+
+  // Modification 1: always check country, not just from failure text
+  const resolvedCountry = inferCountry({ address: inquiry.address, phone });
+  if (resolvedCountry && isRestrictedCountry(resolvedCountry)) {
+    return { result: "skipped", reason: "restricted country" };
+  }
+
+  // Modification 2: generate mediaToken if media exists but no token yet
+  if (!inquiry.mediaToken && (inquiry.imageLinks?.length || inquiry.videoLinks?.length || inquiry.customerLinks?.length)) {
+    inquiry = { ...inquiry, mediaToken: crypto.randomBytes(9).toString("base64url") };
+    await saveInquiry(inquiry);
   }
 
   try {

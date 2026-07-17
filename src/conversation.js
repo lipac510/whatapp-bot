@@ -505,7 +505,8 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
 export function handleCustomerAttachment(session, attachmentType, attachmentLink, profileName = "", customerId = "", channelName = "whatsapp") {
   const activeSession = session || startConversation(profileName, customerId, channelName).session;
   const key = attachmentType === "video" ? "videoLinks" : "imageLinks";
-  const updated = {
+  const label = attachmentType === "video" ? "video" : "photo";
+  let updated = {
     ...activeSession,
     profileName: activeSession.profileName || profileName,
     customerId: activeSession.customerId || customerId,
@@ -519,6 +520,26 @@ export function handleCustomerAttachment(session, attachmentType, attachmentLink
     return {
       session: updated,
       replies: [],
+      complete: false
+    };
+  }
+
+  // If customer sends image/video before answering the product question,
+  // treat it as implicit product confirmation and advance to quantity.
+  if (updated.step === "product") {
+    updated = {
+      ...updated,
+      step: "quantity",
+      attachmentPromptedStep: "quantity",
+      attachmentPromptedAt: new Date().toISOString(),
+      data: {
+        ...updated.data,
+        product: updated.data.product || "Other"
+      }
+    };
+    return {
+      session: updated,
+      replies: [`Your ${label} has been received.\n\n${prompts.quantity}`],
       complete: false
     };
   }
