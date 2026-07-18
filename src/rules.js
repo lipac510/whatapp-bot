@@ -32,7 +32,12 @@ const restrictedCountries = new Set([
   "SY",
   "JO",
   "KP",
-  "PK"
+  "PK",
+  "LB",
+  "SD",
+  "NG",
+  "BJ",
+  "KE"
 ]);
 
 const latinAmericaCountries = new Set([
