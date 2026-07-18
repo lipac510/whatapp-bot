@@ -138,7 +138,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     user_id: userId > 0 ? userId : undefined,
     is_public: userId > 0 ? 0 : undefined,
     name: companyName,
-    short_name: undefined,
+    short_name: companyName,
     country,
     address: inquiry.address || "",
     tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
