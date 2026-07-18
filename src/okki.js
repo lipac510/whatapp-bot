@@ -148,7 +148,7 @@ export function buildOkkiCompanyPayload(inquiry) {
     customers: [
       cleanObject({
         customer_id: 0,
-        name: inquiry.profileName || inquiry.displayName || phone.fullNumber,
+        name: undefined,
         email: inquiry.email || "",
         tel_area_code: isOfficialNotice ? undefined : phone.telAreaCode,
         tel: isOfficialNotice ? undefined : phone.localNumber,

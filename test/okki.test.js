@@ -21,7 +21,7 @@ test("builds OKKI customer payload from inquiry", () => {
   assert.equal(payload.address, "Dubai, UAE");
   assert.equal(payload.tel_area_code, "86");
   assert.equal(payload.tel, "18014856231");
-  assert.equal(payload.customers[0].name, "Buyer");
+  assert.equal(payload.customers[0].name, undefined);
   assert.equal(payload.customers[0].email, "buyer@example.com");
   assert.equal(payload.customers[0].tel_area_code, "86");
   assert.equal(payload.customers[0].tel, "18014856231");
@@ -53,11 +53,11 @@ test("builds OKKI payload from an Instagram inquiry using the collected WhatsApp
   assert.equal(payload.tel, "18014856231");
   assert.equal(payload.customers[0].whatsapp, "8618014856231");
   // The Instagram @handle is the contact name and appears in the remark so the account is findable.
-  assert.equal(payload.customers[0].name, "@iguser");
+  assert.equal(payload.customers[0].name, undefined);
   assert.match(payload.remark, /@iguser/);
 });
 
-test("uses WhatsApp number as fallback contact name", () => {
+test("contact name is always blank (昵称 left empty)", () => {
   const payload = buildOkkiCompanyPayload({
     customerId: "8618014856231",
     product: "Paper cup",
@@ -66,7 +66,7 @@ test("uses WhatsApp number as fallback contact name", () => {
     email: ""
   });
 
-  assert.equal(payload.customers[0].name, "8618014856231");
+  assert.equal(payload.customers[0].name, undefined);
 });
 
 test("keeps email and WhatsApp out of inquiry summary remark", () => {
