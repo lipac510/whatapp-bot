@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAdminModel, renderAdminCsv, renderAdminPage } from "../src/admin.js";
+import { buildAdminModel, renderAdminCsv, renderAdminErrorPage, renderAdminPage } from "../src/admin.js";
 
 test("builds admin conversations from message and OKKI logs", () => {
   const model = buildAdminModel({
@@ -170,4 +170,18 @@ test("renders admin csv export", () => {
   assert.match(csv, /"No\.","Customer ID"/);
   assert.match(csv, /\"123\"/);
   assert.match(csv, /\"Paper Bag\"/);
+});
+
+test("renders explicit admin storage errors instead of an empty dashboard", () => {
+  const html = renderAdminErrorPage({
+    error: new Error("Supabase message_events GET failed: JWT issued at future"),
+    storageStatus: {
+      mode: "supabase",
+      supabaseConfigured: true
+    }
+  });
+
+  assert.match(html, /Supabase data could not be loaded/);
+  assert.match(html, /not showing zero customers/);
+  assert.match(html, /JWT issued at future/);
 });

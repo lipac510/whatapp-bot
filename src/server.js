@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { config, shouldVerifyWebhookSignature, validateConfig } from "./config.js";
 import {
   clearSession,
+  flushLocalFallbackToSupabase,
   getHandoffWindow,
   getSession,
   isKnownCustomer,
@@ -15,6 +16,7 @@ import {
   listMessageEvents,
   listOkkiSyncs,
   listSessions,
+  getStorageStatus,
   markEmmaReplySent,
   markHandoffReminderSent,
   markHandoffWindow,
@@ -27,7 +29,7 @@ import {
   saveSession,
   wasEmmaReplySent
 } from "./storage.js";
-import { buildAdminModel, renderAdminCsv, renderAdminPage } from "./admin.js";
+import { buildAdminModel, renderAdminCsv, renderAdminErrorPage, renderAdminPage } from "./admin.js";
 import {
   formatInquiryForLog,
   handleCustomerImage,
@@ -406,7 +408,14 @@ async function handleWebhookPost(request, response, channel) {
 
       await saveSession(message.from, result.session);
       sessionCache.set(message.from, result.session);
-      await markMessageProcessed(message.id);
+
+      if (!result.complete) {
+        await markMessageProcessed(message.id);
+        for (const reply of result.replies) {
+          await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
+        }
+        continue;
+      }
 
       if (result.complete) {
         // Resolve the customer's Instagram @handle (the webhook only carries the id) so OKKI
@@ -474,6 +483,7 @@ async function handleWebhookPost(request, response, channel) {
           const retryPrompt = fallbackStep === "quantity"
             ? "Please tell us the quantity you need, for example: 1000 pcs."
             : "Please share your country or shipping address, for example: Canada or Dubai, UAE.";
+          await markMessageProcessed(message.id);
           await sendAndLogText(channel, message.from, retryPrompt, { category: "conversation_reply" });
           continue;
         }
@@ -502,6 +512,7 @@ async function handleWebhookPost(request, response, channel) {
             country: rejection.country,
             quantity: rejection.quantity
           });
+          await markMessageProcessed(message.id);
           continue;
         }
 
@@ -553,6 +564,7 @@ async function handleWebhookPost(request, response, channel) {
             sessionCache.delete(message.from);
           }
 
+          await markMessageProcessed(message.id);
           for (const reply of result.replies) {
             await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
           }
@@ -562,6 +574,7 @@ async function handleWebhookPost(request, response, channel) {
             await markKnownCustomer(message.from, "okki_existing");
             await clearSession(message.from);
             sessionCache.delete(message.from);
+            await markMessageProcessed(message.id);
             await sendEmmaReplyOnce(channel, message.from, "okki_existing");
           } else if (isRetryableCountryError(okkiError.message)) {
             const repairedSession = {
@@ -575,6 +588,7 @@ async function handleWebhookPost(request, response, channel) {
             };
             await saveSession(message.from, repairedSession);
             sessionCache.set(message.from, repairedSession);
+            await markMessageProcessed(message.id);
             await sendAndLogText(
               channel,
               message.from,
@@ -607,10 +621,7 @@ async function handleWebhookPost(request, response, channel) {
             messageId: message.id,
             error: okkiError.message
           });
-        }
-      } else {
-        for (const reply of result.replies) {
-          await sendAndLogText(channel, message.from, reply, { category: "conversation_reply" });
+          await markMessageProcessed(message.id);
         }
       }
     } catch (error) {
@@ -631,6 +642,20 @@ async function handleWebhookPost(request, response, channel) {
   sendJson(response, 200, { ok: true, received: messages.length });
 }
 
+async function loadAdminPayload() {
+  await flushLocalFallbackToSupabase();
+  return {
+    messages: await listMessageEvents(),
+    inquiries: await listInquiries(),
+    failures: await listFailures(),
+    okkiSyncs: await listOkkiSyncs(),
+    sessions: await listSessions(),
+    knownCustomers: await listKnownCustomers(),
+    handoffWindows: await listHandoffWindows(),
+    emmaReplies: await listEmmaReplies()
+  };
+}
+
 async function handleRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
@@ -639,7 +664,8 @@ async function handleRequest(request, response) {
       sendJson(response, 200, {
         ok: true,
         service: "wa-customer-info-bot",
-        phoneNumberId: config.phoneNumberId
+        phoneNumberId: config.phoneNumberId,
+        storage: getStorageStatus()
       });
       return;
     }
@@ -720,21 +746,20 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/conversations") {
       if (!requireAdmin(request, response)) return;
-      const payload = {
-        messages: await listMessageEvents(),
-        inquiries: await listInquiries(),
-        failures: await listFailures(),
-        okkiSyncs: await listOkkiSyncs(),
-        sessions: await listSessions(),
-        knownCustomers: await listKnownCustomers(),
-        handoffWindows: await listHandoffWindows(),
-        emmaReplies: await listEmmaReplies()
-      };
-      const model = buildAdminModel({
-        ...payload,
-        query: url.searchParams.get("q") || ""
-      });
-      sendJson(response, 200, { ...payload, conversations: model.conversations, totals: model.totals });
+      try {
+        const payload = await loadAdminPayload();
+        const model = buildAdminModel({
+          ...payload,
+          query: url.searchParams.get("q") || ""
+        });
+        sendJson(response, 200, { ...payload, conversations: model.conversations, totals: model.totals });
+      } catch (error) {
+        sendJson(response, 503, {
+          error: "Supabase data could not be loaded",
+          detail: error.message,
+          storage: getStorageStatus()
+        });
+      }
       return;
     }
 
@@ -742,40 +767,30 @@ async function handleRequest(request, response) {
       if (!requireAdmin(request, response)) return;
       const query = url.searchParams.get("q") || "";
       const selectedCustomerId = url.searchParams.get("customer") || "";
-      const payload = {
-        messages: await listMessageEvents(),
-        inquiries: await listInquiries(),
-        failures: await listFailures(),
-        okkiSyncs: await listOkkiSyncs(),
-        sessions: await listSessions(),
-        knownCustomers: await listKnownCustomers(),
-        handoffWindows: await listHandoffWindows(),
-        emmaReplies: await listEmmaReplies()
-      };
-      const model = buildAdminModel({ ...payload, query });
-      sendHtml(response, 200, renderAdminPage({ ...payload, model, selectedCustomerId, query }));
+      try {
+        const payload = await loadAdminPayload();
+        const model = buildAdminModel({ ...payload, query });
+        sendHtml(response, 200, renderAdminPage({ ...payload, model, selectedCustomerId, query }));
+      } catch (error) {
+        sendHtml(response, 503, renderAdminErrorPage({ error, storageStatus: getStorageStatus() }));
+      }
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/admin/export.csv") {
       if (!requireAdmin(request, response)) return;
       const query = url.searchParams.get("q") || "";
-      const payload = {
-        messages: await listMessageEvents(),
-        inquiries: await listInquiries(),
-        failures: await listFailures(),
-        okkiSyncs: await listOkkiSyncs(),
-        sessions: await listSessions(),
-        knownCustomers: await listKnownCustomers(),
-        handoffWindows: await listHandoffWindows(),
-        emmaReplies: await listEmmaReplies()
-      };
-      const model = buildAdminModel({ ...payload, query });
-      response.writeHead(200, {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="whatsapp-bot-admin.csv"'
-      });
-      response.end(renderAdminCsv(model));
+      try {
+        const payload = await loadAdminPayload();
+        const model = buildAdminModel({ ...payload, query });
+        response.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="whatsapp-bot-admin.csv"'
+        });
+        response.end(renderAdminCsv(model));
+      } catch (error) {
+        sendPlain(response, 503, `Supabase data could not be loaded: ${error.message}\n`);
+      }
       return;
     }
 
@@ -992,6 +1007,9 @@ server.on("error", (error) => {
 
 server.listen(config.port, config.host, async () => {
   console.log(`WhatsApp bot listening on http://${config.host}:${config.port}`);
+  await flushLocalFallbackToSupabase().catch((error) =>
+    console.warn(`Local fallback flush failed: ${error.message}`)
+  );
   await initIgTokens().catch((error) => console.warn(`Instagram token init failed: ${error.message}`));
   startTokenScheduler();
   scheduleDailyRetry();

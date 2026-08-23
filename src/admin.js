@@ -469,6 +469,39 @@ export function renderAdminPage({
     </section>
     ${renderDetails({ customerId: selectedCustomerId, messages, inquiries, failures, okkiSyncs, sessions, knownCustomers, handoffWindows, emmaReplies })}
   </main>
+	</body>
+	</html>`;
+}
+
+export function renderAdminErrorPage({ error, storageStatus = {} } = {}) {
+  const message = error?.message || String(error || "Unknown storage error");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WhatsApp Bot Admin</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; color: #17212b; background: #f5f7fa; }
+    body { margin: 0; }
+    header { background: #111827; color: white; padding: 16px 22px; }
+    h1 { margin: 0; font-size: 20px; }
+    main { padding: 22px; }
+    .panel { max-width: 820px; background: white; border: 1px solid #fecaca; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+    .alert { color: #991b1b; font-weight: 700; margin: 0 0 10px; }
+    p { line-height: 1.5; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header><h1>WhatsApp Bot Admin</h1></header>
+  <main>
+    <section class="panel">
+      <p class="alert">Supabase data could not be loaded.</p>
+      <p>The dashboard is not showing zero customers because the records were deleted. It is blocked from rendering temporary local data until Supabase can be reached again.</p>
+      <pre>${escapeHtml(JSON.stringify({ error: message, storageStatus }, null, 2))}</pre>
+    </section>
+  </main>
 </body>
 </html>`;
 }

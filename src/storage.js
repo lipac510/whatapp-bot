@@ -19,15 +19,17 @@ const storageLimits = {
   messageEvents: 10000,
   processedMessages: 1000
 };
-let supabaseRuntimeDisabled = false;
 const supabasePageSize = 1000;
+const supabaseMaxAttempts = 3;
+let lastSupabaseError = null;
+let lastSupabaseOkAt = "";
 
 function randomId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function isSupabaseEnabled() {
-  return hasSupabaseConfig() && !supabaseRuntimeDisabled;
+  return hasSupabaseConfig();
 }
 
 function isRecoverableSupabaseError(error) {
@@ -44,10 +46,37 @@ async function withSupabaseFallback(label, localOperation, supabaseOperation) {
     return await supabaseOperation();
   } catch (error) {
     if (!isRecoverableSupabaseError(error)) throw error;
-    supabaseRuntimeDisabled = true;
-    console.warn(`${label}: ${error.message}. Falling back to local storage for this runtime.`);
+    noteSupabaseError(label, error);
+    console.warn(`${label}: ${error.message}. Falling back to local storage for this operation.`);
     return localOperation();
   }
+}
+
+function noteSupabaseError(label, error) {
+  lastSupabaseError = {
+    label,
+    message: String(error?.message || error),
+    at: new Date().toISOString()
+  };
+}
+
+function noteSupabaseOk() {
+  lastSupabaseOkAt = new Date().toISOString();
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function getStorageStatus() {
+  return {
+    mode: isSupabaseEnabled() ? "supabase" : "local",
+    supabaseConfigured: hasSupabaseConfig(),
+    localDataDir: config.dataDir,
+    supabaseMaxAttempts,
+    lastSupabaseOkAt,
+    lastSupabaseError
+  };
 }
 
 async function ensureDataDir() {
@@ -80,24 +109,34 @@ function buildSupabaseUrl(table, params = {}) {
 }
 
 async function supabaseRequest(method, table, { params = {}, body, prefer } = {}) {
-  const response = await fetch(buildSupabaseUrl(table, params), {
-    method,
-    headers: {
-      apikey: config.supabaseServiceRoleKey,
-      Authorization: `Bearer ${config.supabaseServiceRoleKey}`,
-      "Content-Type": "application/json",
-      ...(prefer ? { Prefer: prefer } : {})
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  });
+  for (let attempt = 1; attempt <= supabaseMaxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(buildSupabaseUrl(table, params), {
+        method,
+        headers: {
+          apikey: config.supabaseServiceRoleKey,
+          Authorization: `Bearer ${config.supabaseServiceRoleKey}`,
+          "Content-Type": "application/json",
+          ...(prefer ? { Prefer: prefer } : {})
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
 
-  const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    const detail = payload?.message || payload?.error_description || payload?.hint || response.statusText;
-    throw new Error(`Supabase ${table} ${method} failed: ${detail}`);
+      const text = await response.text();
+      const payload = text ? JSON.parse(text) : null;
+      if (!response.ok) {
+        const detail = payload?.message || payload?.error_description || payload?.hint || response.statusText;
+        throw new Error(`Supabase ${table} ${method} failed: ${detail}`);
+      }
+
+      noteSupabaseOk();
+      return payload;
+    } catch (error) {
+      noteSupabaseError(`Supabase ${table} ${method} failed`, error);
+      if (!isRecoverableSupabaseError(error) || attempt === supabaseMaxAttempts) throw error;
+      await wait(250 * attempt);
+    }
   }
-  return payload;
 }
 
 async function supabaseSelect(table, params = {}) {
@@ -150,6 +189,179 @@ function rowToStoredPayload(row) {
     ...(row.created_at ? { createdAt: row.created_at } : {}),
     ...(row.updated_at ? { updatedAt: row.updated_at } : {})
   };
+}
+
+function chunkRows(rows, size = 250) {
+  const chunks = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function upsertMany(table, rows, onConflict) {
+  for (const chunk of chunkRows(rows)) {
+    await supabaseUpsert(table, chunk, onConflict);
+  }
+}
+
+async function flushArrayFile(filePath, table, mapRecord) {
+  const records = await readJson(filePath, []);
+  if (!records.length) return 0;
+  await upsertMany(table, records.map(mapRecord), "id");
+  await writeJson(filePath, []);
+  return records.length;
+}
+
+async function flushObjectFile(filePath, table, mapEntries, emptyValue = {}, onConflict = "customer_id") {
+  const records = await readJson(filePath, {});
+  const entries = Object.entries(records);
+  if (!entries.length) return 0;
+  await upsertMany(table, mapEntries(entries), onConflict);
+  await writeJson(filePath, emptyValue);
+  return entries.length;
+}
+
+async function flushOne(stats, name, operation) {
+  try {
+    stats[name] = { count: await operation() };
+  } catch (error) {
+    noteSupabaseError(`Supabase ${name} local flush failed`, error);
+    stats[name] = { error: error.message };
+  }
+}
+
+let localFlushInFlight = null;
+
+export async function flushLocalFallbackToSupabase() {
+  if (!isSupabaseEnabled()) {
+    return { skipped: true, reason: "Supabase is not configured" };
+  }
+
+  if (localFlushInFlight) return localFlushInFlight;
+
+  localFlushInFlight = (async () => {
+    const stats = {};
+
+    await flushOne(stats, "sessions", () =>
+      flushObjectFile(sessionsPath, "sessions", (entries) =>
+        entries.map(([customerId, session]) => ({
+          customer_id: customerId,
+          payload: session,
+          updated_at: session.updatedAt || new Date().toISOString()
+        }))
+      )
+    );
+
+    await flushOne(stats, "inquiries", () =>
+      flushArrayFile(inquiriesPath, "inquiries", (record) => ({
+        id: record.id,
+        customer_id: record.customerId || "",
+        profile_name: record.profileName || "",
+        payload: record,
+        created_at: record.createdAt || new Date().toISOString()
+      }))
+    );
+
+    await flushOne(stats, "processed_messages", () =>
+      flushObjectFile(
+        processedMessagesPath,
+        "processed_messages",
+        (entries) =>
+          entries.map(([messageId, processedAt]) => ({
+            message_id: messageId,
+            processed_at: processedAt || new Date().toISOString()
+          })),
+        {},
+        "message_id"
+      )
+    );
+
+    await flushOne(stats, "failures", () =>
+      flushArrayFile(failuresPath, "failures", (record) => ({
+        id: record.id,
+        customer_id: record.customerId || "",
+        message_id: record.messageId || "",
+        payload: record,
+        created_at: record.createdAt || new Date().toISOString()
+      }))
+    );
+
+    await flushOne(stats, "okki_syncs", () =>
+      flushArrayFile(okkiSyncsPath, "okki_syncs", (record) => ({
+        id: record.id,
+        customer_id: record.customerId || "",
+        message_id: record.messageId || "",
+        payload: record,
+        created_at: record.createdAt || new Date().toISOString()
+      }))
+    );
+
+    await flushOne(stats, "message_events", () =>
+      flushArrayFile(messageEventsPath, "message_events", (record) => ({
+        id: record.id,
+        customer_id: record.customerId || "",
+        message_id: record.messageId || "",
+        direction: record.direction || "",
+        event_type: record.type || "",
+        category: record.category || "",
+        payload: record,
+        created_at: record.createdAt || new Date().toISOString()
+      }))
+    );
+
+    await flushOne(stats, "known_customers", () =>
+      flushObjectFile(knownCustomersPath, "known_customers", (entries) =>
+        entries.map(([customerId, record]) => ({
+          customer_id: customerId,
+          reason: record.reason || "",
+          updated_at: record.updatedAt || new Date().toISOString()
+        }))
+      )
+    );
+
+    await flushOne(stats, "handoff_windows", () =>
+      flushObjectFile(handoffWindowsPath, "handoff_windows", (entries) =>
+        entries.map(([customerId, record]) => ({
+          customer_id: customerId,
+          completed_at: record.completedAt || new Date().toISOString(),
+          reminder_sent: Boolean(record.reminderSent),
+          reminder_sent_at: record.reminderSentAt || null
+        }))
+      )
+    );
+
+    await flushOne(stats, "emma_replies", () =>
+      flushObjectFile(emmaRepliesPath, "emma_replies", (entries) =>
+        entries.map(([customerId, record]) => ({
+          customer_id: customerId,
+          reason: record.reason || "",
+          sent_at: record.sentAt || new Date().toISOString()
+        }))
+      )
+    );
+
+    await flushOne(stats, "ig_tokens", () =>
+      flushObjectFile(
+        igTokensPath,
+        "ig_tokens",
+        (entries) =>
+          entries.map(([accountKey, record]) => ({
+            account_key: accountKey,
+            payload: record,
+            updated_at: record.updatedAt || new Date().toISOString()
+          })),
+        {},
+        "account_key"
+      )
+    );
+
+    return stats;
+  })().finally(() => {
+    localFlushInFlight = null;
+  });
+
+  return localFlushInFlight;
 }
 
 export async function getSession(customerId) {
@@ -450,10 +662,9 @@ export async function listKnownCustomers() {
     return readJson(knownCustomersPath, {});
   }
 
-  const rows = await supabaseSelect("known_customers", {
+  const rows = await supabaseSelectAll("known_customers", {
     select: "customer_id,reason,updated_at",
-    order: "updated_at.desc",
-    limit: "1000"
+    order: "updated_at.desc"
   });
   return Object.fromEntries(
     rows.map((row) => [
@@ -518,10 +729,9 @@ export async function listHandoffWindows() {
     return readJson(handoffWindowsPath, {});
   }
 
-  const rows = await supabaseSelect("handoff_windows", {
+  const rows = await supabaseSelectAll("handoff_windows", {
     select: "customer_id,completed_at,reminder_sent,reminder_sent_at",
-    order: "completed_at.desc",
-    limit: "1000"
+    order: "completed_at.desc"
   });
   return Object.fromEntries(
     rows.map((row) => [
@@ -611,10 +821,9 @@ export async function listEmmaReplies() {
     return readJson(emmaRepliesPath, {});
   }
 
-  const rows = await supabaseSelect("emma_replies", {
+  const rows = await supabaseSelectAll("emma_replies", {
     select: "customer_id,reason,sent_at",
-    order: "sent_at.desc",
-    limit: "1000"
+    order: "sent_at.desc"
   });
   return Object.fromEntries(
     rows.map((row) => [
