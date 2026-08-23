@@ -37,6 +37,23 @@ function isRecoverableSupabaseError(error) {
   return /JWT issued at future|Invalid JWT|expired|network|fetch failed|ECONNRESET|ENOTFOUND|timed out|timeout/i.test(message);
 }
 
+function describeError(error) {
+  const message = String(error?.message || error);
+  const cause = error?.cause || {};
+  const details = [
+    cause.code ? `code=${cause.code}` : "",
+    cause.errno ? `errno=${cause.errno}` : "",
+    cause.syscall ? `syscall=${cause.syscall}` : "",
+    cause.hostname ? `host=${cause.hostname}` : ""
+  ].filter(Boolean);
+  return details.length ? `${message} (${details.join(", ")})` : message;
+}
+
+function detailedError(error) {
+  const message = describeError(error);
+  return message === error?.message ? error : new Error(message);
+}
+
 async function withSupabaseFallback(label, localOperation, supabaseOperation) {
   if (!isSupabaseEnabled()) {
     return localOperation();
@@ -55,7 +72,7 @@ async function withSupabaseFallback(label, localOperation, supabaseOperation) {
 function noteSupabaseError(label, error) {
   lastSupabaseError = {
     label,
-    message: String(error?.message || error),
+    message: describeError(error),
     at: new Date().toISOString()
   };
 }
@@ -69,9 +86,18 @@ function wait(ms) {
 }
 
 export function getStorageStatus() {
+  const supabaseHost = (() => {
+    try {
+      return config.supabaseUrl ? new URL(config.supabaseUrl).hostname : "";
+    } catch {
+      return "invalid-url";
+    }
+  })();
+
   return {
     mode: isSupabaseEnabled() ? "supabase" : "local",
     supabaseConfigured: hasSupabaseConfig(),
+    supabaseHost,
     localDataDir: config.dataDir,
     supabaseMaxAttempts,
     lastSupabaseOkAt,
@@ -132,8 +158,9 @@ async function supabaseRequest(method, table, { params = {}, body, prefer } = {}
       noteSupabaseOk();
       return payload;
     } catch (error) {
-      noteSupabaseError(`Supabase ${table} ${method} failed`, error);
-      if (!isRecoverableSupabaseError(error) || attempt === supabaseMaxAttempts) throw error;
+      const detailed = detailedError(error);
+      noteSupabaseError(`Supabase ${table} ${method} failed`, detailed);
+      if (!isRecoverableSupabaseError(detailed) || attempt === supabaseMaxAttempts) throw detailed;
       await wait(250 * attempt);
     }
   }
