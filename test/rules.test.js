@@ -29,15 +29,21 @@ test("rejects low-information product answers", () => {
 test("parses quantities", () => {
   assert.equal(parseQuantity("5,000 pcs"), 5000);
   assert.equal(parseQuantity("20k"), 20000);
+  assert.equal(parseQuantity("100 psc as of now"), 100);
   assert.equal(isHighValueQuantity("5000 pcs"), true);
   assert.equal(normalizeQuantityAnswer("1000 paper bag"), "");
   assert.equal(normalizeQuantityAnswer("2k"), "2000 pcs");
+  assert.equal(normalizeQuantityAnswer("100 psc as of now"), "100 pcs");
+  assert.equal(normalizeQuantityAnswer("around 100 pcs"), "100 pcs");
 });
 
 test("validates quantity answers", () => {
   assert.equal(isValidQuantityAnswer("1000 pcs"), true);
+  assert.equal(isValidQuantityAnswer("100 psc"), true);
+  assert.equal(isValidQuantityAnswer("100 pcs as of now"), true);
   assert.equal(isValidQuantityAnswer("2k"), true);
   assert.equal(isValidQuantityAnswer("hi"), false);
+  assert.equal(isValidQuantityAnswer("1000 paper bag"), false);
   assert.equal(isValidQuantityAnswer(""), false);
 });
 

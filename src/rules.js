@@ -10,8 +10,11 @@ const productOptions = new Map([
 const lowInformationPattern =
   /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|你好|您好|谢谢|在吗|嗨)$/i;
 const urlOnlyPattern = /^https?:\/\/\S+$/i;
-const numberOnlyPattern = /^\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?$/i;
-const strictQuantityPattern = /^\s*\d+(?:\.\d+)?\s*(k|pcs|pc|pieces|只|个)?\s*$/i;
+const quantityPattern = /(\d+(?:\.\d+)?)\s*(k|pcs|psc|pc|pieces?|只|个)?/i;
+const numberOnlyPattern = /^\d+(?:\.\d+)?\s*(k|pcs|psc|pc|pieces?|只|个)?$/i;
+const strictQuantityPattern = /^\s*\d+(?:\.\d+)?\s*(k|pcs|psc|pc|pieces?|只|个)?\s*$/i;
+const quantityFillerWordsPattern =
+  /\b(i|we|need|needs|want|wants|would|like|order|orders|qty|quantity|is|for|now|as|of|currently|about|around|approx|approximately|roughly|maybe|at|least|min|minimum|first|initial|initially|please|pls|only|just|to|make|do|take)\b/gi;
 
 const officialCodePattern =
   /(\b\d{4,8}\b.{0,80}(是你的|is your|verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp)|(verification code|verify code|security code|login code|confirmation code|auth(?:entication)? code|\bcode\b|验证码|校验码|动态码|one-time password|otp).{0,80}\b\d{4,8}\b)/i;
@@ -109,7 +112,7 @@ export function isHumanHandoffRequest(text) {
 
 export function parseQuantity(value) {
   const text = String(value || "").toLowerCase().replace(/,/g, "");
-  const match = text.match(/(\d+(?:\.\d+)?)\s*(k|pcs|pc|pieces|只|个)?/i);
+  const match = text.match(quantityPattern);
   if (!match) return 0;
 
   const number = Number(match[1]);
@@ -118,13 +121,25 @@ export function parseQuantity(value) {
 }
 
 export function normalizeQuantityAnswer(value) {
-  const text = String(value || "").toLowerCase().replace(/,/g, " ").trim();
-  if (!strictQuantityPattern.test(text)) return "";
-  const match = text.match(/(\d+(?:\.\d+)?)\s*(k|pcs|pc|pieces|只|个)?/i);
+  const text = String(value || "").toLowerCase().replace(/,/g, "").trim();
+  if (!text) return "";
+
+  const match = text.match(quantityPattern);
   if (!match) return "";
 
   const number = Number(match[1]);
   if (!Number.isFinite(number) || number <= 0) return "";
+
+  if (!strictQuantityPattern.test(text)) {
+    const numberMatches = text.match(/\d+(?:\.\d+)?/g) || [];
+    const remainingText = text
+      .replace(quantityPattern, " ")
+      .replace(quantityFillerWordsPattern, " ")
+      .replace(/[^\w\u4e00-\u9fff]+/g, " ")
+      .trim();
+
+    if (numberMatches.length !== 1 || remainingText) return "";
+  }
 
   if (match[2] && match[2].toLowerCase() === "k") {
     return `${number * 1000} pcs`;
@@ -160,10 +175,7 @@ export function isLowInformationText(value) {
 
 export function isValidQuantityAnswer(value) {
   if (isLowInformationText(value)) return false;
-  if (!strictQuantityPattern.test(String(value || "").toLowerCase().replace(/,/g, " ").trim())) {
-    return false;
-  }
-  return parseQuantity(value) > 0;
+  return Boolean(normalizeQuantityAnswer(value));
 }
 
 export function isMeaningfulAddressAnswer(value) {

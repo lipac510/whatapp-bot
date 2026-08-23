@@ -40,7 +40,6 @@ import { inferCountry } from "./country.js";
 import {
   canResolveInquiryCountry,
   existingCustomerReply,
-  humanFallbackReply,
   isHumanHandoffRequest,
   isMeaningfulAddressAnswer,
   isOfficialCodeMessage,
@@ -326,13 +325,6 @@ async function handleWebhookPost(request, response, channel) {
 
       // Detect Arabic and remember it for this customer (sticky — never downgraded).
       if (detectArabic(message.text)) langByCustomer.set(message.from, "ar");
-
-      if (message.type === "unsupported") {
-        // Message the bot can't parse (e.g. voice note / sticker) — hand off to a human once.
-        await sendEmmaReplyOnce(channel, message.from, "unsupported_message", humanFallbackReply);
-        await markMessageProcessed(message.id);
-        continue;
-      }
 
       if (message.type === "text" && isOfficialCodeMessage(message.text)) {
         const noticeTime = new Date().toISOString().replace(/[:.]/g, "-");

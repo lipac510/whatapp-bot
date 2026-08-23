@@ -93,6 +93,43 @@ test("instagram flow collects product, quantity, WhatsApp, then confirms country
   assert.equal(result.inquiry.fastTrack, true);
 });
 
+test("country confirmation asks for text again when the inbound message is empty or unsupported", () => {
+  let result = startConversation("", "instagram:acct:ig-iraq", "instagram");
+  result = handleCustomerMessage(result.session, "2", "", "instagram:acct:ig-iraq");
+  result = handleCustomerMessage(result.session, "1000", "", "instagram:acct:ig-iraq");
+  result = handleCustomerMessage(result.session, "+9647814412800", "", "instagram:acct:ig-iraq");
+
+  assert.equal(result.session.step, "country_confirm");
+  assert.match(result.replies[0], /Should we ship to Iraq/i);
+
+  result = handleCustomerMessage(result.session, "", "", "instagram:acct:ig-iraq");
+
+  assert.equal(result.session.step, "country_confirm");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /reply with text: Yes, No/i);
+});
+
+test("country confirmation accepts Arabic yes and no answers", () => {
+  let result = startConversation("", "instagram:acct:ig-ar", "instagram");
+  result = handleCustomerMessage(result.session, "2", "", "instagram:acct:ig-ar");
+  result = handleCustomerMessage(result.session, "1000", "", "instagram:acct:ig-ar");
+  result = handleCustomerMessage(result.session, "+9647814412800", "", "instagram:acct:ig-ar");
+
+  result = handleCustomerMessage(result.session, "نعم", "", "instagram:acct:ig-ar");
+  assert.equal(result.complete, true);
+  assert.equal(result.inquiry.address, "Iraq");
+
+  result = startConversation("", "instagram:acct:ig-ar-2", "instagram");
+  result = handleCustomerMessage(result.session, "2", "", "instagram:acct:ig-ar-2");
+  result = handleCustomerMessage(result.session, "1000", "", "instagram:acct:ig-ar-2");
+  result = handleCustomerMessage(result.session, "+9647814412800", "", "instagram:acct:ig-ar-2");
+
+  result = handleCustomerMessage(result.session, "لا", "", "instagram:acct:ig-ar-2");
+  assert.equal(result.session.step, "address");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /Which country should we ship to/i);
+});
+
 test("instagram flow falls back to manual address when country guess is rejected", () => {
   let result = startConversation("", "instagram:acct:ig-2", "instagram");
   result = handleCustomerMessage(result.session, "2", "", "instagram:acct:ig-2");
@@ -196,6 +233,16 @@ test("rejects mixed product text in quantity step", () => {
 
   assert.equal(result.session.step, "quantity");
   assert.match(result.replies[0], /quantity you need, for example: 1000 pcs/i);
+});
+
+test("accepts common typo and filler words in quantity step", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "2", "Alice");
+  result = handleCustomerMessage(result.session, "100 psc as of now", "Alice");
+
+  assert.equal(result.session.step, "address");
+  assert.equal(result.session.data.quantity, "100 pcs");
+  assert.equal(result.complete, false);
 });
 
 test("rejects invalid shipping address answers", () => {

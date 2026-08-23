@@ -37,3 +37,9 @@ test("country confirmation keeps the country name in the middle", () => {
   assert.match(ar, /يبدو أن رقم واتساب الخاص بك من United Arab Emirates/);
   assert.match(ar, /هل نشحن إلى United Arab Emirates/);
 });
+
+test("translates the text-only country confirmation retry prompt", () => {
+  const ar = toArabic("Please reply with text: Yes, No, or the correct destination country.");
+  assert.match(ar, /يرجى الرد برسالة نصية/);
+  assert.doesNotMatch(ar, /Please reply/);
+});

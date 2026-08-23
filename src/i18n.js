@@ -70,6 +70,7 @@ const AR_REPLACEMENTS = [
 
   // validation (longer variants before shorter to avoid partial replacement)
   ["Please tell us the quantity you need, for example: 1000 pcs.", "يرجى إخبارنا بالكمية التي تحتاجها، مثال: 1000 قطعة."],
+  ["Please reply with text: Yes, No, or the correct destination country.", "يرجى الرد برسالة نصية: نعم، لا، أو دولة الوجهة الصحيحة."],
   ["Please tell us the product you are looking for.", "يرجى إخبارنا بالمنتج الذي تبحث عنه."],
   ["Please tell us the quantity you need.", "يرجى إخبارنا بالكمية التي تحتاجها."],
   ["Please reply with 1, 2, 3, or 4, or tell us the packaging product you need.", "يرجى الرد بـ 1 أو 2 أو 3 أو 4، أو إخبارنا بمنتج التغليف الذي تحتاجه."],

@@ -124,11 +124,11 @@ function isCustomQuestion(text) {
 }
 
 function isYesAnswer(text) {
-  return /^(yes|y|yeah|yep|correct|right|ok|okay|sure|是|对|没错)$/i.test(normalizeText(text));
+  return /^(yes|y|yeah|yep|correct|right|ok|okay|sure|是|对|没错|نعم|اي|إي|أجل|اجل|صح|صحيح)$/i.test(normalizeText(text));
 }
 
 function isNoAnswer(text) {
-  return /^(no|n|nope|not|another|不是|不对|不是这个)$/i.test(normalizeText(text));
+  return /^(no|n|nope|not|another|不是|不对|不是这个|لا|كلا)$/i.test(normalizeText(text));
 }
 
 function buildCountryConfirmationPrompt(countryCode) {
@@ -154,6 +154,7 @@ function validationMessage(step, text) {
   if (text) return "";
   if (step === "product") return "Please tell us the product you are looking for.";
   if (step === "quantity") return "Please tell us the quantity you need.";
+  if (step === "country_confirm") return "Please reply with text: Yes, No, or the correct destination country.";
   if (step === "address") return "Please share your destination country or shipping address.";
   if (step === "whatsapp") return "Please share your WhatsApp number with country code.";
   return "Please send your answer.";
