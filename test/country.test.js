@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getCountryName,
   inferCountry,
   inferCountryFromPhone,
   inferCountryFromText,
@@ -17,6 +18,37 @@ test("infers country from address text first", () => {
   assert.equal(inferCountryFromText("Doha Qatar"), "QA");
   assert.equal(inferCountryFromText("OMAN MUSCUT"), "OM");
   assert.equal(inferCountryFromText("Delivery to Muscat Oman"), "OM");
+});
+
+test("infers countries from a broader country name list", () => {
+  assert.equal(inferCountryFromText("Eptanisou , Limassol\nCYPRUS"), "CY");
+  assert.equal(inferCountryFromText("Country : CYPRUS"), "CY");
+  assert.equal(inferCountryFromText("Istanbul Turkey"), "TR");
+  assert.equal(inferCountryFromText("Netherlands"), "NL");
+  assert.equal(inferCountryFromText("South Africa"), "ZA");
+  assert.equal(inferCountryFromText("Hong Kong"), "HK");
+  assert.equal(inferCountryFromText("Taiwan"), "TW");
+  assert.equal(inferCountryFromText("Sri Lanka"), "LK");
+  assert.equal(inferCountryFromText("Panama"), "PA");
+  assert.equal(inferCountryFromText("Puerto Rico"), "PR");
+});
+
+test("recognizes restricted countries by name", () => {
+  assert.equal(inferCountryFromText("Kenya"), "KE");
+  assert.equal(inferCountryFromText("Nigeria"), "NG");
+  assert.equal(inferCountryFromText("Benin"), "BJ");
+  assert.equal(inferCountryFromText("Lebanon"), "LB");
+  assert.equal(inferCountryFromText("Sudan"), "SD");
+});
+
+test("does not match short country aliases inside normal words", () => {
+  assert.equal(inferCountryFromText("custom packaging"), "");
+});
+
+test("returns names for newly supported country codes", () => {
+  assert.equal(getCountryName("CY"), "Cyprus");
+  assert.equal(getCountryName("TR"), "Turkey");
+  assert.equal(getCountryName("ZA"), "South Africa");
 });
 
 test("infers country from WhatsApp phone prefix", () => {

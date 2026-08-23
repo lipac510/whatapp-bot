@@ -52,60 +52,54 @@ const fallbackPhoneCountryPrefixes = [
   ["1", "US"]
 ];
 
-const countryNames = {
-  AE: "United Arab Emirates",
-  SA: "Saudi Arabia",
-  IQ: "Iraq",
-  CN: "China",
-  US: "United States",
-  GB: "United Kingdom",
-  DE: "Germany",
-  FR: "France",
-  IT: "Italy",
-  ES: "Spain",
-  CA: "Canada",
-  AU: "Australia",
-  QA: "Qatar",
-  OM: "Oman",
-  JP: "Japan",
+const isoCountryCodes = [
+  "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX",
+  "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ",
+  "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK",
+  "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM",
+  "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR",
+  "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS",
+  "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN",
+  "IO", "IQ", "IR", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN",
+  "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV",
+  "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK", "ML", "MM", "MN", "MO", "MP", "MQ",
+  "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI",
+  "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
+  "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC",
+  "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV",
+  "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR",
+  "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
+  "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
+];
+
+const countryNameOverrides = {
+  CD: "Democratic Republic of the Congo",
+  CG: "Republic of the Congo",
+  CI: "Cote d'Ivoire",
+  CV: "Cape Verde",
+  CZ: "Czech Republic",
   KR: "South Korea",
-  IN: "India",
-  BD: "Bangladesh",
-  EG: "Egypt",
-  AF: "Afghanistan",
-  LY: "Libya",
-  GT: "Guatemala",
-  VN: "Vietnam",
-  MM: "Myanmar",
-  LA: "Laos",
-  YE: "Yemen",
-  TN: "Tunisia",
-  IR: "Iran",
-  SY: "Syria",
-  JO: "Jordan",
   KP: "North Korea",
-  PK: "Pakistan",
-  MX: "Mexico",
-  BR: "Brazil",
-  AR: "Argentina",
-  CL: "Chile",
-  CO: "Colombia",
-  PE: "Peru",
-  VE: "Venezuela",
-  ID: "Indonesia",
-  MY: "Malaysia",
-  TH: "Thailand",
-  PH: "Philippines",
-  SG: "Singapore"
+  MM: "Myanmar",
+  PS: "Palestine",
+  SZ: "Eswatini",
+  TR: "Turkey"
 };
 
-const countryKeywords = [
-  ["AE", ["uae", "united arab emirates", "dubai", "abu dhabi", "阿联酋", "迪拜"]],
-  ["SA", ["saudi", "saudi arabia", "riyadh", "jeddah", "沙特", "沙特阿拉伯"]],
+let regionDisplayNames = null;
+try {
+  regionDisplayNames = new Intl.DisplayNames(["en"], { type: "region" });
+} catch {
+  regionDisplayNames = null;
+}
+
+const countryAliases = [
+  ["AE", ["uae", "u a e", "united arab emirates", "dubai", "abu dhabi", "阿联酋", "迪拜"]],
+  ["SA", ["saudi", "saudi arabia", "ksa", "riyadh", "jeddah", "沙特", "沙特阿拉伯"]],
   ["IQ", ["iraq", "baghdad", "karbala", "erbil", "iraqi", "العراق", "كربلاء", "بغداد", "iraq karbala"]],
   ["CN", ["china", "中国", "mainland china", "guangdong", "shanghai", "beijing", "jiangsu", "zhejiang"]],
-  ["US", ["usa", "united states", "america", "美国"]],
-  ["GB", ["uk", "united kingdom", "britain", "england", "英国"]],
+  ["US", ["usa", "u s a", "united states", "america", "美国"]],
+  ["GB", ["uk", "u k", "united kingdom", "great britain", "britain", "england", "scotland", "wales", "英国"]],
   ["DE", ["germany", "德国"]],
   ["FR", ["france", "法国"]],
   ["IT", ["italy", "意大利"]],
@@ -114,6 +108,51 @@ const countryKeywords = [
   ["AU", ["australia", "澳大利亚"]],
   ["QA", ["qatar", "doha", "卡塔尔", "多哈"]],
   ["OM", ["oman", "om", "muscat", "muscut", "阿曼"]],
+  ["CY", ["cyprus", "limassol", "nicosia", "larnaca", "paphos"]],
+  ["TR", ["turkey", "turkiye", "istanbul", "ankara"]],
+  ["NL", ["netherlands", "holland", "amsterdam"]],
+  ["BE", ["belgium", "brussels"]],
+  ["CH", ["switzerland", "swiss", "zurich", "geneva"]],
+  ["AT", ["austria", "vienna"]],
+  ["PL", ["poland", "warsaw"]],
+  ["PT", ["portugal", "lisbon"]],
+  ["GR", ["greece", "athens"]],
+  ["SE", ["sweden", "stockholm"]],
+  ["NO", ["norway", "oslo"]],
+  ["DK", ["denmark", "copenhagen"]],
+  ["FI", ["finland", "helsinki"]],
+  ["IE", ["ireland", "dublin"]],
+  ["RO", ["romania", "bucharest"]],
+  ["RS", ["serbia", "belgrade"]],
+  ["HR", ["croatia", "zagreb"]],
+  ["HU", ["hungary", "budapest"]],
+  ["UA", ["ukraine", "kyiv", "kiev"]],
+  ["RU", ["russia", "russian federation", "moscow"]],
+  ["KW", ["kuwait"]],
+  ["BH", ["bahrain"]],
+  ["IL", ["israel"]],
+  ["LB", ["lebanon", "beirut"]],
+  ["PS", ["palestine", "palestinian territories"]],
+  ["ZA", ["south africa", "johannesburg", "cape town"]],
+  ["MA", ["morocco", "casablanca", "marrakech"]],
+  ["DZ", ["algeria", "algiers"]],
+  ["KE", ["kenya", "nairobi"]],
+  ["NG", ["nigeria", "lagos", "abuja"]],
+  ["GH", ["ghana", "accra"]],
+  ["BJ", ["benin"]],
+  ["SD", ["sudan", "khartoum"]],
+  ["ET", ["ethiopia", "addis ababa"]],
+  ["TZ", ["tanzania", "dar es salaam"]],
+  ["UG", ["uganda", "kampala"]],
+  ["AO", ["angola", "luanda"]],
+  ["HK", ["hong kong", "hong kong sar"]],
+  ["TW", ["taiwan", "taipei"]],
+  ["LK", ["sri lanka", "colombo"]],
+  ["NP", ["nepal", "kathmandu"]],
+  ["KH", ["cambodia", "phnom penh"]],
+  ["KZ", ["kazakhstan", "astana", "almaty"]],
+  ["MV", ["maldives", "male"]],
+  ["MN", ["mongolia", "ulaanbaatar"]],
   ["JP", ["japan", "日本"]],
   ["KR", ["korea", "south korea", "韩国"]],
   ["IN", ["india", "印度"]],
@@ -142,23 +181,67 @@ const countryKeywords = [
   ["ID", ["indonesia", "印尼", "印度尼西亚"]],
   ["MY", ["malaysia", "马来西亚"]],
   ["TH", ["thailand", "泰国"]],
-  ["VN", ["vietnam", "越南"]],
   ["PH", ["philippines", "菲律宾"]],
-  ["SG", ["singapore", "新加坡"]]
+  ["SG", ["singapore", "新加坡"]],
+  ["PA", ["panama"]],
+  ["CR", ["costa rica"]],
+  ["BO", ["bolivia"]],
+  ["EC", ["ecuador"]],
+  ["PY", ["paraguay"]],
+  ["UY", ["uruguay"]],
+  ["PR", ["puerto rico"]],
+  ["DO", ["dominican republic"]]
 ];
+
+function normalizeComparable(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9\u0600-\u06ff\u4e00-\u9fff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildCountryKeywordEntries() {
+  const generatedNames = isoCountryCodes
+    .map((country) => [country, getCountryName(country)])
+    .filter(([, name]) => name);
+  const entries = [...countryAliases, ...generatedNames]
+    .flatMap(([country, keywords]) => {
+      const values = Array.isArray(keywords) ? keywords : [keywords];
+      return values.map((keyword) => ({
+        country,
+        keyword,
+        normalizedKeyword: normalizeComparable(keyword)
+      }));
+    })
+    .filter((entry) => entry.normalizedKeyword);
+
+  return entries.sort((a, b) => b.normalizedKeyword.length - a.normalizedKeyword.length);
+}
+
+const countryKeywordEntries = buildCountryKeywordEntries();
+
+function keywordMatches(normalizedText, normalizedKeyword) {
+  if (!normalizedText || !normalizedKeyword) return false;
+  if (/^[a-z0-9 ]+$/.test(normalizedKeyword)) {
+    return ` ${normalizedText} `.includes(` ${normalizedKeyword} `);
+  }
+  return normalizedText.includes(normalizedKeyword);
+}
 
 export function normalizePhoneNumber(value) {
   return String(value || "").replace(/[^\d]/g, "");
 }
 
 export function inferCountryFromText(value) {
-  const text = String(value || "").toLowerCase();
+  const text = normalizeComparable(value);
   if (!text) return "";
 
-  for (const [country, keywords] of countryKeywords) {
-    if (keywords.some((keyword) => text.includes(keyword.toLowerCase()))) {
-      return country;
-    }
+  for (const { country, normalizedKeyword } of countryKeywordEntries) {
+    if (keywordMatches(text, normalizedKeyword)) return country;
   }
 
   return "";
@@ -185,7 +268,9 @@ export function inferCountry({ address, phone }) {
 }
 
 export function getCountryName(countryCode) {
-  return countryNames[String(countryCode || "").toUpperCase()] || "";
+  const code = String(countryCode || "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "";
+  return countryNameOverrides[code] || regionDisplayNames?.of(code) || "";
 }
 
 export function getCountryFlag(countryCode) {
