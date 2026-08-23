@@ -13,6 +13,7 @@ import {
   normalizeProductAnswer,
   normalizeWhatsAppAnswer
 } from "./rules.js";
+import { findKnowledgeAnswer } from "./knowledge.js";
 
 const maxInvalidBeforeHandoff = 3;
 
@@ -41,12 +42,6 @@ function phoneForCountry(session, customerId) {
 }
 
 const minimumFastTrackQuantity = 5000;
-const websiteReply = "Please view our web: www.cnlipack.com for more products.";
-const companyAddress =
-  "Our address: Building 6, No. 198 Changjian Road, Luojing Town, Baoshan District, Shanghai.";
-const moqReply = "Our MOQ is 500 pcs.";
-const customReply =
-  "Yes, we support custom packaging. Please send your product type, quantity, shipping address, and any photos/videos/links if you have them.";
 const productQuestion = [
   "#1 — what kind of packaging do you need?",
   "",
@@ -101,26 +96,6 @@ function isRestart(text) {
 function isBotQuestion(text) {
   return /\b(bot|robot|ai|human|real person|real human)\b/i.test(normalizeText(text)) ||
     /机器人|真人|人工客服/.test(normalizeText(text));
-}
-
-function isCatalogQuestion(text) {
-  return /\b(catalog|catalogue|brochure|website|web|products?)\b/i.test(normalizeText(text)) ||
-    /目录|产品册|网站/.test(normalizeText(text));
-}
-
-function isLocationQuestion(text) {
-  return /\b(where are you|location|address|factory address|company address|office address)\b/i.test(normalizeText(text)) ||
-    /你们在哪里|地址|工厂在哪里|公司在哪里/.test(normalizeText(text));
-}
-
-function isSampleQuestion(text) {
-  return /\b(sample|samples?|moq|minimum order|minimum quantity)\b/i.test(normalizeText(text)) ||
-    /样品|起订量|最小起订|最少/.test(normalizeText(text));
-}
-
-function isCustomQuestion(text) {
-  return /\b(custom|customized|bespoke|oem|odm|size|sizes|specification|specifications)\b/i.test(normalizeText(text)) ||
-    /定制|尺寸|规格|可不可以做|能不能做/.test(normalizeText(text));
 }
 
 function isYesAnswer(text) {
@@ -291,42 +266,11 @@ export function handleCustomerMessage(session, messageText, profileName = "", cu
     };
   }
 
-  if (isCatalogQuestion(text) && customerLinks.length === 0) {
-    return {
-      session: customerLinks.length
-        ? {
-            ...session,
-            data: {
-              ...session.data,
-              customerLinks
-            }
-          }
-        : session,
-      replies: [`${websiteReply}\n\n${currentPromptForStep(session, step)}`],
-      complete: false
-    };
-  }
-
-  if (isLocationQuestion(text)) {
+  const knowledgeAnswer = customerLinks.length === 0 ? findKnowledgeAnswer(text) : "";
+  if (knowledgeAnswer) {
     return {
       session,
-      replies: [`${companyAddress}\n\n${currentPromptForStep(session, step)}`],
-      complete: false
-    };
-  }
-
-  if (isSampleQuestion(text)) {
-    return {
-      session,
-      replies: [`${moqReply}\n\n${currentPromptForStep(session, step)}`],
-      complete: false
-    };
-  }
-
-  if (isCustomQuestion(text)) {
-    return {
-      session,
-      replies: [`${customReply}\n\n${currentPromptForStep(session, step)}`],
+      replies: [`${knowledgeAnswer}\n\n${currentPromptForStep(session, step)}`],
       complete: false
     };
   }

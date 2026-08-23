@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "purpose": "MVP knowledge base for WhatsApp and Instagram customer questions.",
+  "answerRules": [
+    "Use knowledge files only when the customer asks a product, catalog, MOQ, delivery, material, custom logo, or company capability question.",
+    "If the customer is clearly answering the current collection step, continue the normal collection flow first.",
+    "After answering a knowledge question, return to the current collection prompt.",
+    "Do not invent exact prices, lead times, certifications, or MOQ values unless they are written in the knowledge file.",
+    "If no matching knowledge exists, give a brief safe answer and ask Emma to follow up."
+  ],
+  "documents": [
+    {
+      "id": "product-paper-bags",
+      "type": "product",
+      "title": "Paper Bags",
+      "path": "products/paper-bags.md",
+      "keywords": ["paper bag", "shopping bag", "kraft bag", "gift bag", "handle bag"]
+    },
+    {
+      "id": "product-rigid-boxes",
+      "type": "product",
+      "title": "Luxury Rigid Boxes",
+      "path": "products/rigid-boxes.md",
+      "keywords": ["rigid box", "luxury box", "gift box", "magnetic box", "premium box"]
+    },
+    {
+      "id": "product-corrugated-boxes",
+      "type": "product",
+      "title": "Corrugated Boxes",
+      "path": "products/corrugated-boxes.md",
+      "keywords": ["corrugated box", "shipping box", "carton", "mailing box", "mailer box"]
+    },
+    {
+      "id": "faq-moq",
+      "type": "faq",
+      "title": "MOQ",
+      "path": "faq/moq.md",
+      "keywords": ["moq", "minimum order", "minimum quantity", "small quantity"]
+    },
+    {
+      "id": "faq-delivery-time",
+      "type": "faq",
+      "title": "Delivery Time",
+      "path": "faq/delivery-time.md",
+      "keywords": ["delivery", "lead time", "production time", "shipping time", "how long"]
+    },
+    {
+      "id": "faq-custom-logo",
+      "type": "faq",
+      "title": "Custom Logo",
+      "path": "faq/custom-logo.md",
+      "keywords": ["custom logo", "logo", "printing", "branding", "customize"]
+    },
+    {
+      "id": "faq-catalog",
+      "type": "faq",
+      "title": "Catalog",
+      "path": "faq/catalog.md",
+      "keywords": ["catalog", "catalogue", "brochure", "pdf", "pictures", "photos"]
+    },
+    {
+      "id": "faq-samples",
+      "type": "faq",
+      "title": "Samples",
+      "path": "faq/samples.md",
+      "keywords": ["sample", "sampling", "sample cost", "sample fee", "sample process"]
+    },
+    {
+      "id": "faq-order-process",
+      "type": "faq",
+      "title": "Order Process",
+      "path": "faq/order-process.md",
+      "keywords": ["order process", "how to order", "payment", "production process", "qc", "shipping"]
+    },
+    {
+      "id": "faq-company-contact",
+      "type": "faq",
+      "title": "Company Contact",
+      "path": "faq/company-contact.md",
+      "keywords": ["address", "location", "contact", "live agent", "human agent", "emma", "whatsapp", "wechat"]
+    }
+  ],
+  "assets": {
+    "catalogs": [
+      {
+        "id": "rigid-box-catalog",
+        "title": "Luxury Rigid Box Catalog",
+        "path": "assets/catalogs/rigid-box-catalog.pdf",
+        "product": "Luxury Rigid Box",
+        "usage": "Send when customers ask for rigid box catalog, box styles, finishing, inserts, handles, or decorative options."
+      }
+    ],
+    "documents": [
+      {
+        "id": "faq-source",
+        "title": "FAQ Source Document",
+        "path": "assets/documents/faq-source.docx",
+        "usage": "Original FAQ source file used to build FAQ markdown entries."
+      }
+    ],
+    "images": [
+      {
+        "id": "paper-bag-shopping-examples-01",
+        "title": "Paper Bag Shopping Examples 01",
+        "path": "assets/images/paper-bags/paper-bag-shopping-examples-01.jpg",
+        "product": "Paper Bags"
+      },
+      {
+        "id": "paper-bag-shopping-examples-02",
+        "title": "Paper Bag Shopping Examples 02",
+        "path": "assets/images/paper-bags/paper-bag-shopping-examples-02.jpg",
+        "product": "Paper Bags"
+      },
+      {
+        "id": "paper-bag-logo-examples-01",
+        "title": "Paper Bag Logo Examples",
+        "path": "assets/images/paper-bags/paper-bag-logo-examples-01.jpg",
+        "product": "Paper Bags"
+      },
+      {
+        "id": "rigid-box-kraft-lid-base-01",
+        "title": "Rigid Box Kraft Lid Base",
+        "path": "assets/images/rigid-boxes/rigid-box-kraft-lid-base-01.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "rigid-box-lid-base-orange-01",
+        "title": "Rigid Box Lid Base Orange",
+        "path": "assets/images/rigid-boxes/rigid-box-lid-base-orange-01.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "rigid-box-magnetic-examples-01",
+        "title": "Rigid Box Magnetic Examples",
+        "path": "assets/images/rigid-boxes/rigid-box-magnetic-examples-01.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "rigid-box-magnetic-flip-lid-stock-chart",
+        "title": "Magnetic Flip Lid Box Stock Chart",
+        "path": "assets/images/rigid-boxes/rigid-box-magnetic-flip-lid-stock-chart.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "rigid-box-magnetic-ribbon-stock-chart",
+        "title": "Magnetic Flip Lid Box With Ribbon Stock Chart",
+        "path": "assets/images/rigid-boxes/rigid-box-magnetic-ribbon-stock-chart.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "rigid-box-triangular-cover-folding-stock-chart",
+        "title": "Triangular Cover Folding Box Stock Chart",
+        "path": "assets/images/rigid-boxes/rigid-box-triangular-cover-folding-stock-chart.jpg",
+        "product": "Luxury Rigid Box"
+      },
+      {
+        "id": "production-process-01",
+        "title": "Production Process",
+        "path": "assets/images/process/production-process-01.jpg",
+        "product": "Process"
+      },
+      {
+        "id": "order-process-01",
+        "title": "Order Process",
+        "path": "assets/images/process/order-process-01.png",
+        "product": "Process"
+      },
+      {
+        "id": "sample-development-process-01",
+        "title": "Sample Development Process",
+        "path": "assets/images/process/sample-development-process-01.jpg",
+        "product": "Process"
+      }
+    ],
+    "videos": [
+      {
+        "id": "product-video-01",
+        "title": "Product Video 01",
+        "path": "assets/videos/product-video-01.mp4",
+        "usage": "Product video material. Review before sending to customers."
+      },
+      {
+        "id": "product-video-02",
+        "title": "Product Video 02",
+        "path": "assets/videos/product-video-02.mp4",
+        "usage": "Product video material. Review before sending to customers."
+      }
+    ]
+  }
+}

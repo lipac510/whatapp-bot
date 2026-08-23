@@ -181,12 +181,12 @@ test("answers catalog questions and keeps collecting product", () => {
 
   assert.equal(result.session.step, "product");
   assert.equal(result.complete, false);
-  assert.match(result.replies[0], /www\.cnlipack\.com/);
+  assert.match(result.replies[0], /product examples and catalog/i);
   assert.match(result.replies[0], /what kind of packaging do you need/);
   assert.doesNotMatch(result.replies[0], /Hi there!/);
 });
 
-test("answers location and MOQ questions without advancing", () => {
+test("answers location and sample questions from knowledge without advancing", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "where are you?", "Alice");
 
@@ -195,7 +195,36 @@ test("answers location and MOQ questions without advancing", () => {
 
   result = handleCustomerMessage(result.session, "can I order sample?", "Alice");
   assert.equal(result.session.step, "product");
-  assert.match(result.replies[0], /MOQ is 500 pcs/);
+  assert.match(result.replies[0], /sample fee is usually USD 300/i);
+});
+
+test("answers MOQ and delivery time questions from knowledge without advancing", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "2", "Alice");
+  assert.equal(result.session.step, "quantity");
+
+  result = handleCustomerMessage(result.session, "what is your MOQ?", "Alice");
+  assert.equal(result.session.step, "quantity");
+  assert.match(result.replies[0], /customized orders, MOQ is usually around 500 pieces/i);
+  assert.match(result.replies[0], /What quantity do you need/i);
+
+  result = handleCustomerMessage(result.session, "how long is production time?", "Alice");
+  assert.equal(result.session.step, "quantity");
+  assert.match(result.replies[0], /15-25 days/i);
+  assert.match(result.replies[0], /What quantity do you need/i);
+});
+
+test("answers product knowledge questions but plain product answers still advance", () => {
+  let result = startConversation("Alice");
+  result = handleCustomerMessage(result.session, "Do you make paper bags?", "Alice");
+
+  assert.equal(result.session.step, "product");
+  assert.match(result.replies[0], /custom paper bags/i);
+  assert.match(result.replies[0], /what kind of packaging do you need/i);
+
+  result = handleCustomerMessage(result.session, "Paper bag", "Alice");
+  assert.equal(result.session.step, "quantity");
+  assert.equal(result.session.data.product, "Paper Bag");
 });
 
 test("rejects empty answers without advancing", () => {
