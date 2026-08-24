@@ -22,15 +22,15 @@ const fallbackAnswers = new Map([
 const intentRules = [
   {
     id: "faq-catalog",
-    pattern: /\b(catalog|catalogue|brochure|pdf|pictures?|photos?)\b|目录|产品册|图片|照片|كتالوج|صور/i
+    pattern: /\b(catalog|catalogue|brochure|pdf|pictures?|photos?|product\s+(list|sheet|book|photos?|pictures?|images?)|product\s+examples?|portfolio|design\s+options?)\b|\b(show|send|share)\s+(me\s+)?(your\s+)?(catalog|catalogue|brochure|products?|pictures?|photos?|examples?)\b|目录|产品册|图册|款式|图片|照片|كتالوج|صور/i
   },
   {
     id: "faq-samples",
-    pattern: /\b(samples?|sampling|sample fee|sample cost)\b|样品|打样|عينة/i
+    pattern: /\b(samples?|sampling|sample fee|sample cost|sample price|sample charge|sample lead time|prototype|mock[- ]?up|proof|pre[- ]?production sample)\b|样品|打样|打版|عينة/i
   },
   {
     id: "faq-moq",
-    pattern: /\b(moq|minimum order|minimum quantity|small quantity)\b|起订量|最小起订|最少|الحد الأدنى/i
+    pattern: /\b(moq|m\.o\.q|minimum order|minimum quantity|minimum order qty|minimum qty|minimum pcs|minimum pieces|lowest quantity|low quantity|small quantity|small order|trial order)\b|\b(can|could|do|does|would|will|accept|support|make)\s+(you\s+)?(accept|support|make|do)?\s*\d+\s*(pcs|pieces|units?)\b|起订量|最小起订|最低起订|最少|小批量|الحد الأدنى/i
   },
   {
     id: "faq-delivery-time",
@@ -46,7 +46,7 @@ const intentRules = [
   },
   {
     id: "faq-company-contact",
-    pattern: /\b(where are you|your location|factory address|company address|office address|contact information|live agent|human agent)\b|你们在哪里|工厂在哪里|公司在哪里|人工|真人|联系方式|عنوان|أين أنتم|اين انتم/i
+    pattern: /\b(where are you|where are you located|where.*based|where.*your\s+(factory|company|office)|your location|factory location|company location|office location|your address|factory address|company address|office address|contact information|live agent|human agent)\b|\b(address|location)\s+(of|for)\s+(your\s+)?(factory|company|office)\b|你们在哪里|工厂在哪里|公司在哪里|你们地址|工厂地址|公司地址|人工|真人|联系方式|عنوان|أين أنتم|اين انتم/i
   },
   {
     id: "product-rigid-boxes",

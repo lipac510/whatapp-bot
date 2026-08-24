@@ -214,6 +214,40 @@ test("answers MOQ and delivery time questions from knowledge without advancing",
   assert.match(result.replies[0], /What quantity do you need/i);
 });
 
+test("answers expanded knowledge FAQ keywords without advancing collection", () => {
+  let result = startConversation("Alice");
+
+  result = handleCustomerMessage(result.session, "where is your factory located?", "Alice");
+  assert.equal(result.session.step, "product");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /Changjian Road/i);
+  assert.match(result.replies[0], /what kind of packaging do you need/i);
+
+  result = handleCustomerMessage(result.session, "2", "Alice");
+  assert.equal(result.session.step, "quantity");
+
+  result = handleCustomerMessage(result.session, "do you accept trial order 100 pieces?", "Alice");
+  assert.equal(result.session.step, "quantity");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /MOQ is usually around 500 pieces/i);
+  assert.match(result.replies[0], /What quantity do you need/i);
+
+  result = handleCustomerMessage(result.session, "can you make a prototype sample?", "Alice");
+  assert.equal(result.session.step, "quantity");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /sample fee is usually USD 300/i);
+  assert.match(result.replies[0], /What quantity do you need/i);
+
+  result = handleCustomerMessage(result.session, "1000 pcs", "Alice");
+  assert.equal(result.session.step, "address");
+
+  result = handleCustomerMessage(result.session, "can you share your product list?", "Alice");
+  assert.equal(result.session.step, "address");
+  assert.equal(result.complete, false);
+  assert.match(result.replies[0], /product examples and catalog/i);
+  assert.match(result.replies[0], /Which country should we ship to/i);
+});
+
 test("answers product knowledge questions but plain product answers still advance", () => {
   let result = startConversation("Alice");
   result = handleCustomerMessage(result.session, "Do you make paper bags?", "Alice");
